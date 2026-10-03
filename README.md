@@ -13,7 +13,11 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus encrypted standalone secrets (e.g. `github_token` for the MCP row). |
 | `credentials.sops.yaml` | Encrypted copy of the harness credential store. |
 | `bin/` | Bootstrap and secrets helpers. |
-| `AGENTS.md` | Instructions for coding agents (TypeScript-first). |
+| `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
+
+A root `AGENTS.md` is deliberately absent: `$DSH_HOME/AGENTS.md` is the
+user-global instruction file the harness loads in *every* session on this
+machine, so repo-scoped agent rules live in `plugins/AGENTS.md` instead.
 
 ## What is deliberately not tracked
 

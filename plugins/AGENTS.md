@@ -1,11 +1,12 @@
 # AGENTS.md
 
-Instructions for coding agents working in this DSH home (`$DSH_HOME`).
+Instructions for coding agents working on the plugins in this repo.
 
-This file is both this repo's project instructions and the user-global
-`$DSH_HOME/AGENTS.md`, so it loads in every session on this machine. Everything
-below is scoped to this repo and the plugins it carries — other projects here
-follow their own conventions, and these rules must not be carried into them.
+This file deliberately lives under `plugins/` rather than at the repo root. The
+repo root is `$DSH_HOME`, and `$DSH_HOME/AGENTS.md` is the *user-global*
+instruction file that the harness injects into every session on this machine,
+whatever the project. Keeping these rules in this subtree scopes them to work
+that actually touches a plugin here.
 
 ## Use TypeScript
 
