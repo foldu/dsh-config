@@ -13,6 +13,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus encrypted standalone secrets (e.g. `github_token` for the MCP row). |
 | `credentials.sops.yaml` | Encrypted copy of the harness credential store. |
 | `bin/` | Bootstrap and secrets helpers. |
+| `AGENTS.md` | Instructions for coding agents (TypeScript-first). |
 
 ## What is deliberately not tracked
 
