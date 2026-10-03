@@ -1,0 +1,46 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1
+
+# Kagi search provider (dsh-web-search-kagi), installed from the local
+# checkout at plugins/dsh-web-search-kagi (repo-local).
+- insert:
+    - id: web-search-kagi
+      name: 'dsh-web-search-kagi'
+
+# Pin the web seam's search to Kagi. A patch replaces the row's whole config,
+# so fetchProvider is restated to keep web_fetch on the shipped HTTP backend.
+- id: web
+  config:
+    searchProvider: kagi
+    fetchProvider: http
+
+# Stop mounting the shipped DeepSeek provider so the two never compete.
+- id: web-search-deepseek
+  disabled: true
+
+# GitHub's official MCP server, remote (hosted) variant — no local process.
+# Requires github_token in $DSH_HOME/secrets.sops.yaml (read at mount time via
+# sops, so no secret ever lives in this file). Published: dsh-mcp-client maps
+# its tools to mcp__github__<tool>.
+- insert:
+    - id: mcp-github
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: github
+        transport: streamable-http
+        url: https://api.githubcopilot.com/mcp/
+        headers:
+          Authorization: !!js >-
+            (() => {
+              const { execFileSync } = process.getBuiltinModule('node:child_process');
+              const token = execFileSync('sops', ['-d', '--extract', '["github_token"]', dshHomePath('secrets.sops.yaml')], { encoding: 'utf8' }).trim();
+              if (!token || token === 'REPLACE_ME') throw new Error('dsh: github_token is unset in ' + dshHomePath('secrets.sops.yaml') + ' — run: sops ' + dshHomePath('secrets.sops.yaml'));
+              return 'Bearer ' + token;
+            })()
+          # Read-only toolset; drop this header for write access.
+          X-MCP-Readonly: 'true'

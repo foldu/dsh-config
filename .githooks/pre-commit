@@ -1,0 +1,23 @@
+#!/bin/sh
+# Guard rails for a repo that lives next to live API keys.
+set -eu
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+# 1. Never commit the decrypted credential store.
+if printf '%s\n' "$staged" | grep -qx '.credentials.yaml'; then
+  echo "pre-commit: refusing .credentials.yaml — run bin/secrets-encrypt.sh instead" >&2
+  exit 1
+fi
+
+# 2. Keep profile plugin links portable.
+if git diff --cached -- 'profiles/*/package.json' | grep -qE '^\+.*"link:/'; then
+  echo "pre-commit: absolute link: spec staged — use a repo-relative path" >&2
+  exit 1
+fi
+
+# 3. Block likely plaintext tokens in the staged diff.
+if git diff --cached -U0 | grep -nE '^\+.*(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._-]{20,})'; then
+  echo "pre-commit: possible plaintext secret staged; aborting" >&2
+  exit 1
+fi

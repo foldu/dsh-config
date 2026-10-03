@@ -1,0 +1,19 @@
+# --- DSH runtime state: private, churning, machine-specific ---
+/sessions/
+/storages/
+/logs/
+/.anonymous-user-id
+
+# --- decrypted secrets (the sops copies ARE tracked) ---
+/.credentials.yaml
+.env
+.env.*
+
+# --- installed packages ---
+node_modules/
+.pnpm-store/
+profiles/*/.plugin-manager/
+
+# --- build residue ---
+*.tsbuildinfo
+coverage/

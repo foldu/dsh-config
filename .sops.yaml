@@ -1,0 +1,16 @@
+# Creation rules for the DSH harness secrets file.
+# The age identity is the existing one at ~/.config/sops/age/keys.txt.
+# Add a second age1… key below (comma-separated) and run:
+#   sops updatekeys secrets.sops.yaml
+creation_rules:
+  - path_regex: secrets\.sops\.ya?ml$
+    key_groups:
+      - age:
+          - age14yat0hyq3w0ahkzetdw9t9q28x2pe3x4e27qs2kw9e968frdec3sx0ntr7
+
+# The harness credential store, encrypted as a whole file so bootstrap
+# can restore .credentials.yaml verbatim.
+  - path_regex: credentials\.sops\.ya?ml$
+    key_groups:
+      - age:
+          - age14yat0hyq3w0ahkzetdw9t9q28x2pe3x4e27qs2kw9e968frdec3sx0ntr7

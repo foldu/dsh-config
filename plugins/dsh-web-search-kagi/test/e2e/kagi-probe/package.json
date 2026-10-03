@@ -1,0 +1,11 @@
+{
+  "name": "kagi-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Test fixture: calls ctx.web.search() through the real loader and logs the outcome",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  }
+}
