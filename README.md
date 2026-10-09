@@ -10,6 +10,9 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `profiles/<name>/cordis.patch.yml` | The profile's own patch layer — the file to edit. |
 | `profiles/<name>/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml,cordis.yml}` | Profile manifest and its plugin dependencies. |
 | `plugins/dsh-web-search-kagi/` | Kagi Search API v1 provider for `ctx.web` (TypeScript; see its README). |
+| `plugins/dsh-bash-shfmt/` | Web GUI decoration that shows bash commands reformatted with `shfmt` in the approval prompt and the bash tool row; see its README. |
+| `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (e.g. `~/.cache`); see its README. |
+| `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus encrypted standalone secrets (e.g. `github_token` for the MCP row). |
 | `credentials.sops.yaml` | Encrypted copy of the harness credential store. |
 | `bin/` | Bootstrap and secrets helpers. |
@@ -21,9 +24,9 @@ machine, so repo-scoped agent rules live in `plugins/AGENTS.md` instead.
 
 ## What is deliberately not tracked
 
-`sessions/`, `storages/`, `logs/` and `.anonymous-user-id` (private runtime
-state), `.credentials.yaml` (the decrypted credential store), and every
-`node_modules/`.
+`sessions/`, `storages/`, `logs/`, `attachments/`, `cache/`, `llm-deepseek/` and
+`.anonymous-user-id` (private runtime state), `.credentials.yaml` (the decrypted
+credential store), and every `node_modules/`.
 
 ## Restore on a fresh machine
 
@@ -38,7 +41,7 @@ git clone <this repo> ~/.dsh
 
 Then restart the harness. Configuration reloads live, but a newly linked or
 moved plugin module only mounts on a restart — which is why bootstrap builds
-`plugins/dsh-web-search-kagi/lib/` (build output is not committed).
+every local plugin's build output (`lib/`), which is not committed.
 
 ## Secrets
 
@@ -62,3 +65,8 @@ it once per clone:
 ```sh
 git config core.hooksPath .githooks
 ```
+
+`dsh plugin add` — and the harness's own plugin manager — writes a `link:` spec
+with an *absolute* path, which rule 2 then rejects. Rewrite it to
+`../../plugins/<name>` (the form every entry here uses) before committing; that
+is what keeps a clone working when it lives at a different path.

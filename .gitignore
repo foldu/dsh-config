@@ -3,6 +3,11 @@
 /storages/
 /logs/
 /.anonymous-user-id
+# Session attachments (pasted/rendered images), the attachment request cache,
+# and the DeepSeek provider's uploaded-file index.
+/attachments/
+/cache/
+/llm-deepseek/
 
 # --- decrypted secrets (the sops copies ARE tracked) ---
 /.credentials.yaml
