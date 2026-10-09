@@ -1,0 +1,9 @@
+# Build-script decisions for this package's dependencies.
+#
+# `koffi` (a transitive dependency of the Windows ACL runner, pulled in by
+# @deepseek-ai/dsh-sandbox-local) ships prebuilt native binaries per platform
+# and its install script is unnecessary here, so pnpm must not fail the install
+# with ERR_PNPM_IGNORED_BUILDS — bin/bootstrap.sh runs `pnpm install` under
+# `set -e` and would abort on it.
+allowBuilds:
+  koffi: false

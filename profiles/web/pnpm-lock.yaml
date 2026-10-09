@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      dsh-bash-shfmt:
+        specifier: link:../../plugins/dsh-bash-shfmt
+        version: link:../../plugins/dsh-bash-shfmt
       dsh-claude-copilot-brand:
         specifier: link:../../plugins/dsh-claude-copilot-brand
         version: link:../../plugins/dsh-claude-copilot-brand
+      dsh-extra-writable-roots:
+        specifier: link:../../plugins/dsh-extra-writable-roots
+        version: link:../../plugins/dsh-extra-writable-roots
       dsh-web-search-kagi:
         specifier: link:../../plugins/dsh-web-search-kagi
         version: link:../../plugins/dsh-web-search-kagi

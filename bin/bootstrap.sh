@@ -14,10 +14,12 @@ if [ ! -f .credentials.yaml ]; then
   fi
 fi
 
-# 2. Build the local plugin: the harness loads lib/index.js, which is not tracked.
-if [ -d plugins/dsh-web-search-kagi ]; then
-  ( cd plugins/dsh-web-search-kagi && pnpm install && pnpm build )
-fi
+# 2. Build the local plugins: the harness loads lib/index.js, which is not tracked.
+for plugin in plugins/*/; do
+  [ -f "${plugin}package.json" ] || continue
+  echo "building ${plugin}"
+  ( cd "$plugin" && pnpm install && pnpm build )
+done
 
 # 3. Materialize profile plugin links (link: specs need no network).
 for profile in profiles/*/; do
@@ -25,11 +27,13 @@ for profile in profiles/*/; do
   ( cd "$profile" && pnpm install )
 done
 
-# 4. Verify the composition sees the plugin.
+# 4. Verify the composition sees the plugins.
 dump=$(dsh --profile web --dump-config)
-case "$dump" in
-  *web-search-kagi*) echo "ok: web profile composes the kagi provider" ;;
-  *) echo "FAIL: web profile does not compose web-search-kagi" >&2; exit 1 ;;
-esac
+for plugin in web-search-kagi bash-shfmt extra-writable-roots claude-copilot-brand; do
+  case "$dump" in
+    *"$plugin"*) echo "ok: web profile composes $plugin" ;;
+    *) echo "FAIL: web profile does not compose $plugin" >&2; exit 1 ;;
+  esac
+done
 
 echo "restart the harness to mount anything newly linked"

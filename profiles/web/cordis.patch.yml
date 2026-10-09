@@ -44,3 +44,75 @@
             })()
           # Read-only toolset; drop this header for write access.
           X-MCP-Readonly: 'true'
+
+# Extra sandbox writable roots (dsh-extra-writable-roots). This list lives in
+# the profile patch rather than the bundle's own patch because HMR watches this
+# file: an edit here applies to the next confined call, while editing a bundle
+# layer only changes what a fresh composition reads. Each entry must exist and
+# be a directory; declaring /tmp also replaces the runner's private per-call
+# tmpfs with the host directory, so temp files persist across calls.
+- id: extra-writable-roots
+  config:
+    writablePaths:
+      - '~/.cache'
+      - '~/.cargo'
+      - /tmp
+    applyInReadOnly: false
+
+# Watch the local plugin sources, so saving a plugin file (or a `pnpm build`)
+# reloads that plugin in place instead of needing a harness restart. `root` is
+# resolved against the profile directory and HMR ignores `**/node_modules`, so
+# this names the real `$DSH_HOME/plugins` tree rather than the profile's
+# symlinks into it. Only `config` is restated: the shipped row's `disabled`
+# condition (a launched profile) stays as the base bundle set it.
+#
+# A reload re-imports the changed module graph and re-registers the plugin with
+# the config it already had, so plugin instance state is not preserved. For a
+# plugin that provides services (as dsh-extra-writable-roots does) a call that
+# lands inside the swap can fail; HMR rolls back to the previous generation if
+# the replacement cannot be imported or activated.
+#
+# Do not trigger a reload from inside a long-lived confined call: a call still
+# running when the reload starts becomes its in-flight consumer and stalls or is
+# aborted while teardown settles. Edit, let the call return, verify separately.
+- id: hmr
+  config:
+    root:
+      - '../../plugins'
+- id: session-log-deepseek
+  name: "@deepseek-ai/dsh-session-log-deepseek"
+  config:
+    enabled: false
+
+# GitLab MCP server (built into the GitLab instance at lab.home.5kw.li).
+# Unlike GitHub's, this one is OAuth-only: it has no PAT mode (the endpoint
+# answers PATs with an OAuth token error), so dsh-mcp-client cannot reach it
+# directly — it sends static headers and has no browser handshake. mcp-remote
+# bridges stdio to the remote HTTP endpoint and runs the OAuth authorization
+# code + PKCE flow itself, so the model sees this server like any other stdio
+# MCP server. The first connect prints an authorize URL and opens a browser;
+# after you approve once, the token is cached and later starts are unattended.
+- insert:
+    - id: mcp-gitlab
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: gitlab
+        transport: stdio
+        command: npx
+        args:
+          - '-y'
+          - 'mcp-remote'
+          - 'https://lab.home.5kw.li/api/v4/mcp'
+        # ~/.npm is not writable for the harness user, so npx must be told to
+        # cache elsewhere or it dies with EROFS before mcp-remote starts.
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          # mcp-remote defaults to ~/.mcp-auth, which is outside the declared
+          # writable roots; keep the token cache under ~/.cache instead.
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # A failed connect is loud instead of a silently tool-less server.
+        failOnStartupError: true
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: dark

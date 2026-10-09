@@ -1,0 +1,39 @@
+# Extra writable roots for the DSH file sandbox.
+#
+# The sandbox's policy type carries exactly one workspace root plus the platform
+# temp areas, so extra roots cannot be configured on the shipped rows. This
+# bundle replaces both enforcing halves instead: a context holds one provider
+# per service, so the shipped rows are disabled and the extended copies are
+# inserted in their place.
+#
+# The replacement keeps the shipped providers' configuration surface. Anything
+# configured on the rows below (`runnerCommand`, `runnerFailureSignatures`,
+# `probeTimeoutMs` from `@deepseek-ai/dsh-sandbox-local`; `cwd` and
+# `diffBasisMaxBytes` from `@deepseek-ai/dsh-fs-local`) belongs on the
+# `extra-writable-roots` row after the swap — a patch replaces a row's whole
+# config, so restate every field that was set.
+- id: sandbox
+  disabled: true
+
+- id: fs-sandbox
+  disabled: true
+
+- insert:
+    - id: extra-writable-roots
+      name: 'dsh-extra-writable-roots'
+      config:
+        # The bundle ships no deployment paths: HMR watches the *profile* patch
+        # layer, not a bundle's own patch, so the live-editable list belongs in
+        # `profiles/<name>/cordis.patch.yml` as an `- id: extra-writable-roots`
+        # override. Editing this file alone changes only what a fresh
+        # composition reads (see the plugin README).
+        #
+        # An entry is an absolute path or `~/…` and must exist and be a
+        # directory. Declaring the host temp directory also *promotes* it:
+        # bwrap's profile mounts a private per-call `/tmp`, and declaring it
+        # replaces that mount with a bind of the host `/tmp`, so temp files
+        # persist across calls and both enforcing halves see the same directory.
+        writablePaths: []
+        # `read-only` keeps denying every mutation; set true only when the
+        # standing mode must stop meaning what its model-visible contract says.
+        applyInReadOnly: false

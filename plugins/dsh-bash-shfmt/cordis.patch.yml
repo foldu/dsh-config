@@ -1,0 +1,35 @@
+# shfmt-formatted bash commands in the Web GUI.
+#
+# The package is a host+client bundle: the Host half owns the `shfmt` process
+# behind one same-origin route, the Client half shadows the two seats that print
+# a bash command (the approval prompt's detail row, and the keyed
+# `tool.call.toolview` entry for `bash`). Nothing here touches the session log or
+# the model-visible call, so a formatting failure can only ever leave the
+# original text on screen.
+#
+# These are defaults. HMR watches the *profile* patch layer, not this file, so a
+# live-editable value belongs in `profiles/<name>/cordis.patch.yml` as an
+# `- id: bash-shfmt` override — and a patch replaces a row's whole config, so
+# restate every field that was set.
+- insert:
+    - id: bash-shfmt
+      name: 'dsh-bash-shfmt'
+      config:
+        # false answers every request with the original command (route stays up).
+        enabled: true
+        # Executable name or path, resolved through the Host process PATH.
+        binary: shfmt
+        # The flags ~/.pi/agent's guard extension uses, so both agents format a
+        # command the same way. `--simplify` is the only rewrite that could
+        # change behaviour; drop it if a display transform must be inert.
+        args:
+          - --language-dialect
+          - bash
+          - --simplify
+          - --binary-next-line
+        # Hard per-invocation ceiling; a timeout keeps the original command.
+        timeoutMs: 5000
+        # Longest accepted request body; far above any real command.
+        maxBodyBytes: 65536
+        # Distinct commands whose formatting is reused, oldest evicted first.
+        cacheSize: 512

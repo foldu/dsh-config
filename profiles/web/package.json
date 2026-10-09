@@ -2,7 +2,9 @@
   "name": "dsh-profile-web",
   "private": true,
   "dependencies": {
+    "dsh-bash-shfmt": "link:../../plugins/dsh-bash-shfmt",
     "dsh-claude-copilot-brand": "link:../../plugins/dsh-claude-copilot-brand",
+    "dsh-extra-writable-roots": "link:../../plugins/dsh-extra-writable-roots",
     "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi"
   },
   "dsh": {
@@ -11,6 +13,8 @@
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
         "@deepseek-ai/dsh-experimental-auto-review",
+        "dsh-bash-shfmt",
+        "dsh-extra-writable-roots",
         "dsh-claude-copilot-brand"
       ]
     }
