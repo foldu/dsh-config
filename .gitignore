@@ -4,10 +4,13 @@
 /logs/
 /.anonymous-user-id
 # Session attachments (pasted/rendered images), the attachment request cache,
-# and the DeepSeek provider's uploaded-file index.
+# and the per-provider uploaded-file indexes the LLM adapters keep beside their
+# own state (e.g. llm-deepseek/files-v3.json). `/llm-*/` rather than the one
+# directory seen so far: the index path is each adapter's own choice, not a
+# shared convention.
 /attachments/
 /cache/
-/llm-deepseek/
+/llm-*/
 
 # --- decrypted secrets (the sops copies ARE tracked) ---
 /.credentials.yaml
