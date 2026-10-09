@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      dsh-claude-copilot-brand:
+        specifier: link:../../plugins/dsh-claude-copilot-brand
+        version: link:../../plugins/dsh-claude-copilot-brand
       dsh-web-search-kagi:
         specifier: link:../../plugins/dsh-web-search-kagi
         version: link:../../plugins/dsh-web-search-kagi

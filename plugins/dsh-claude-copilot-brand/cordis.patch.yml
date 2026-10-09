@@ -1,0 +1,17 @@
+# Sidebar brand override (dsh-claude-copilot-brand).
+#
+# This bundle inserts one row; the Client half of the same package replaces the
+# two sidebar brand slots:
+#
+#   sidebar.brand.mark -> the OpenAI logomark
+#   sidebar.brand.name -> the text "Claude Copilot"
+#
+# The shipped `ui-brand-official` row keeps its registration: both slots are
+# `single`, and a single slot renders its *lowest*-priority occupant, so the
+# occupants here register at `priority: -1` and shadow the shipped ones without
+# that row being disabled or restated. Nothing outside the left sidebar's brand
+# row is claimed — `conversation.hero.brand.mark` keeps the shipped artwork, and
+# the collapsed rail is covered because it renders `sidebar.brand.mark` too.
+- insert:
+    - id: claude-copilot-brand
+      name: 'dsh-claude-copilot-brand'

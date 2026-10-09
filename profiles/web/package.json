@@ -2,6 +2,7 @@
   "name": "dsh-profile-web",
   "private": true,
   "dependencies": {
+    "dsh-claude-copilot-brand": "link:../../plugins/dsh-claude-copilot-brand",
     "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi"
   },
   "dsh": {
@@ -9,7 +10,8 @@
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@deepseek-ai/dsh-experimental-auto-review"
+        "@deepseek-ai/dsh-experimental-auto-review",
+        "dsh-claude-copilot-brand"
       ]
     }
   }
