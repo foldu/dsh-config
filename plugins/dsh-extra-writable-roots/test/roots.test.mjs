@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { expandHome, grantsExtraRoots, isUnderRoot, resolveWritableRoots, WritableRootSet } from '../lib/roots.js';
+import { expandEnv, expandHome, grantsExtraRoots, isUnderRoot, resolveWritableRoots, WritableRootSet } from '../lib/roots.js';
 
 /** A scratch directory that is writable on every supported host. */
 function scratch() {
@@ -21,6 +21,31 @@ test('expandHome expands a leading ~ and leaves other spellings alone', () => {
 
 test('expandHome is not applied to a ~ that is not a leading path segment', () => {
 	assert.equal(expandHome('/tmp/~/.cache'), '/tmp/~/.cache');
+});
+
+test('expandEnv expands $NAME and ${NAME} from the given environment', () => {
+	const env = { XDG_RUNTIME_DIR: '/run/user/1000', CACHE: '/home/user/.cache' };
+	assert.equal(expandEnv('$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000', env), '/run/user/1000/pnpm-store-operation-locks-1000');
+	assert.equal(expandEnv('${CACHE}/pnpm', env), '/home/user/.cache/pnpm');
+	assert.equal(expandEnv('$CACHE/${CACHE}', env), '/home/user/.cache//home/user/.cache');
+	assert.equal(expandEnv('/plain/path', env), '/plain/path');
+});
+
+test('expandEnv leaves a lone or nameless $ alone', () => {
+	assert.equal(expandEnv('$', { HOME: '/home/user' }), '$');
+	assert.equal(expandEnv('/tmp/$/cache', { HOME: '/home/user' }), '/tmp/$/cache');
+});
+
+test('expandEnv fails loud on an unset or empty variable', () => {
+	assert.throws(() => expandEnv('$DSH_NOPE/cache', {}), /environment variable "DSH_NOPE" is unset/u);
+	assert.throws(() => expandEnv('${EMPTY}/cache', { EMPTY: '' }), /"EMPTY" is unset/u);
+});
+
+test('resolveWritableRoots expands environment references before canonicalizing', () => {
+	const dir = scratch();
+	mkdirSync(join(dir, 'pnpm'));
+	assert.deepEqual(resolveWritableRoots(['$PROBE_HOME/pnpm'], { env: { PROBE_HOME: dir } }), [realpathSync.native(join(dir, 'pnpm'))]);
+	assert.throws(() => resolveWritableRoots(['$PROBE_UNSET/pnpm'], { env: {} }), /environment variable "PROBE_UNSET" is unset/u);
 });
 
 test('resolveWritableRoots canonicalizes symlinks and deduplicates', () => {
@@ -50,6 +75,21 @@ test('resolveWritableRoots rejects an empty entry', () => {
 test('resolveWritableRoots rejects a missing entry', () => {
 	const dir = scratch();
 	assert.throws(() => resolveWritableRoots([join(dir, 'missing')]), /does not exist/u);
+});
+
+test('resolveWritableRoots creates a missing entry only when asked', () => {
+	const dir = scratch();
+	const leaf = join(dir, 'runtime-locks');
+	const created = resolveWritableRoots([leaf], { createMissing: true });
+	assert.deepEqual(created, [realpathSync.native(leaf)]);
+	assert.equal(statSync(leaf).isDirectory(), true);
+	assert.equal(statSync(leaf).mode & 0o777, 0o700);
+});
+
+test('resolveWritableRoots creates a missing entry through an existing parent chain', () => {
+	const dir = scratch();
+	const leaf = join(dir, 'a', 'b');
+	assert.deepEqual(resolveWritableRoots([leaf], { createMissing: true }), [realpathSync.native(leaf)]);
 });
 
 test('resolveWritableRoots rejects a non-directory entry', () => {
@@ -116,3 +156,23 @@ test('WritableRootSet fails closed when a live edit stops resolving', () => {
 	configured = [good];
 	assert.deepEqual(set.value, [realpathSync.native(good)]);
 });
+
+test('WritableRootSet honours live resolution options', () => {
+	const dir = scratch();
+	const leaf = join(dir, 'lazy-locks');
+	let createMissing = false;
+	const failures = [];
+	const set = new WritableRootSet(
+		() => ['$PROBE_HOME/lazy-locks'],
+		(error) => failures.push(error),
+		() => ({ env: { PROBE_HOME: dir }, createMissing }),
+	);
+	assert.deepEqual(set.value, []);
+	assert.equal(failures.length, 1);
+	createMissing = true;
+	// The configuration string did not change, so the set must re-resolve on a
+	// changed option alone; otherwise a live `createMissingRoots` edit would
+	// have no effect.
+	assert.deepEqual(set.value, [realpathSync.native(leaf)]);
+});
+

@@ -49,15 +49,34 @@
 # the profile patch rather than the bundle's own patch because HMR watches this
 # file: an edit here applies to the next confined call, while editing a bundle
 # layer only changes what a fresh composition reads. Each entry must exist and
-# be a directory; declaring /tmp also replaces the runner's private per-call
-# tmpfs with the host directory, so temp files persist across calls.
+# be a directory, unless `createMissingRoots` is set; declaring /tmp also
+# replaces the runner's private per-call tmpfs with the host directory, so temp
+# files persist across calls.
+#
+# The pnpm entries exist so an in-sandbox `pnpm install`/`pnpm add` (and npx)
+# works: pnpm keeps its content-addressable store outside every workspace, its
+# last-update state under the XDG state dir, npx caches under ~/.npm, and its
+# store-operation lock files under the per-login runtime dir. `$XDG_RUNTIME_DIR`
+# is expanded by the plugin, and `createMissingRoots` creates the lock
+# directory, which pnpm itself creates lazily — the first store operation can
+# happen after this row mounts, and failing the mount would take both sandbox
+# halves down with it.
 - id: extra-writable-roots
   config:
     writablePaths:
       - '~/.cache'
       - '~/.cargo'
       - /tmp
+      # pnpm store lock files (uid 1000's per-login runtime directory).
+      - '$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000'
+      # pnpm's content-addressable store.
+      - '~/.local/share/pnpm'
+      # pnpm-state.json (the update-notifier state).
+      - '~/.local/state/pnpm'
+      # npx/npm cache, which `npx mcp-remote` writes.
+      - '~/.npm'
     applyInReadOnly: false
+    createMissingRoots: true
 
 # Watch the local plugin sources, so saving a plugin file (or a `pnpm build`)
 # reloads that plugin in place instead of needing a harness restart. `root` is
@@ -103,12 +122,12 @@
           - '-y'
           - 'mcp-remote'
           - 'https://lab.home.5kw.li/api/v4/mcp'
-        # ~/.npm is not writable for the harness user, so npx must be told to
-        # cache elsewhere or it dies with EROFS before mcp-remote starts.
+        # Keep both caches under ~/.cache, a declared writable root, so the npx
+        # cache and the OAuth token cache are writable by the harness process
+        # and by a confined `npx mcp-remote` alike. mcp-remote otherwise
+        # defaults to ~/.mcp-auth, which no root grants.
         env:
           npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
-          # mcp-remote defaults to ~/.mcp-auth, which is outside the declared
-          # writable roots; keep the token cache under ~/.cache instead.
           MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
         # A failed connect is loud instead of a silently tool-less server.
         failOnStartupError: true

@@ -38,8 +38,10 @@ import z from '@deepseek-ai/schemastery';
 import { widenArgv } from './dialects.js';
 import type { RunnerDialect } from './dialects.js';
 import { grantsExtraRoots, isUnderRoot, resolveWritableRoots, WritableRootSet } from './roots.js';
+import type { ResolveOptions } from './roots.js';
 
-export { expandHome, grantsExtraRoots, isUnderRoot, resolveWritableRoots, WritableRootSet } from './roots.js';
+export { expandEnv, expandHome, grantsExtraRoots, isUnderRoot, resolveWritableRoots, WritableRootSet } from './roots.js';
+export type { ResolveOptions } from './roots.js';
 export { detectDialect, widenArgv } from './dialects.js';
 export type { RunnerDialect, Widening } from './dialects.js';
 
@@ -56,10 +58,12 @@ export const inject: string[] = ['sandboxPolicy'];
  * rows it disabled.
  */
 export interface Config extends FsLocalConfig, SandboxLocalConfig {
-	/** Extra absolute roots — `~/…` allowed — that every confined execution may write; defaults to none. */
+	/** Extra absolute roots — `~/…` and `$VAR` allowed — that every confined execution may write; defaults to none. */
 	writablePaths: Volatile<string[]>;
 	/** Whether the extra roots also apply under `read-only`. Defaults to false, which keeps that mode's contract honest. */
 	applyInReadOnly: Volatile<boolean>;
+	/** Whether a configured root that does not exist yet is created (`0700`) instead of failing the mount; defaults to false. */
+	createMissingRoots: Volatile<boolean>;
 }
 
 /**
@@ -71,6 +75,7 @@ export const Config = z.object({
 	...(LocalSandboxProvider.Config.dict ?? {}),
 	writablePaths: z.array(z.string()).default([]).volatile(),
 	applyInReadOnly: z.boolean().default(false).volatile(),
+	createMissingRoots: z.boolean().default(false).volatile(),
 });
 
 /**
@@ -252,15 +257,23 @@ function renderExtraRoots(roots: readonly string[], applyInReadOnly: boolean): s
  * @param config - the live row config.
  */
 export function apply(ctx: Context, config: Config): void {
+	// Environment references and the create-missing decision are read on every
+	// resolution, so a live edit to either applies to the next confined call
+	// without a remount.
+	const resolveOptions = (): ResolveOptions => ({
+		env: process.env,
+		createMissing: config.createMissingRoots.get(),
+	});
 	// Fail loud at mount: a configured root that does not resolve would
 	// otherwise look like a sandbox bug at write time. Live edits after mount
 	// re-resolve through the set and fail closed to no extra roots.
-	resolveWritableRoots(config.writablePaths.get());
+	resolveWritableRoots(config.writablePaths.get(), resolveOptions());
 	const roots = new WritableRootSet(
 		() => config.writablePaths.get(),
 		(error) => {
 			ctx.logger.warn(`extra-writable-roots: ${error.message}; granting no extra roots until the configuration resolves again`);
 		},
+		resolveOptions,
 	);
 	new ExtraRootsSandboxProvider(ctx, config, roots);
 	new ExtraRootsFileSystem(ctx, config, roots);

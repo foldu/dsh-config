@@ -4,11 +4,13 @@ Deployment-wide **extra writable roots** for the DSH file sandbox: paths that
 every session may write under `workspace-write`, without a per-call escalation.
 
 Motivating cases: `~/.cache`, which tooling writes regardless of which project
-workspace a session runs in, and `/tmp`, which bwrap shadows with a private
-per-call tmpfs. The shipped policy cannot express either — `SandboxExecutionPolicy`
-carries one `workspaceRoot`, and `writableRoots()` derives
-`{workspace, /tmp, os.tmpdir()}` from it. This bundle adds the missing list, and
-makes a declared path mean *the host directory* in every execution world.
+workspace a session runs in, `/tmp`, which bwrap shadows with a private
+per-call tmpfs, and pnpm's global store plus its per-login runtime lock
+directory, which an in-sandbox `pnpm install` needs. The shipped policy cannot
+express any of them — `SandboxExecutionPolicy` carries one `workspaceRoot`, and
+`writableRoots()` derives `{workspace, /tmp, os.tmpdir()}` from it. This bundle
+adds the missing list, and makes a declared path mean *the host directory* in
+every execution world.
 
 ## What it does
 
@@ -54,18 +56,34 @@ list.
       - /tmp
       - /var/tmp/build-cache
     applyInReadOnly: false
+    createMissingRoots: false
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `writablePaths` | `[]` | Absolute paths, or `~/…`. Each must exist and be a directory; a relative, missing, or non-directory entry fails the plugin load loudly rather than granting nothing silently. Entries are canonicalized (`realpath`) and deduplicated. A declared path is always **the host directory**: if the runner hides it behind a private mount (bwrap's `/tmp` tmpfs), that mount is replaced by a bind of the host path, so the shell and the file tools see one directory and its contents persist across calls. |
+| `writablePaths` | `[]` | Absolute paths, `~/…`, or paths with `$VAR`/`${VAR}` references. Each must exist and be a directory; a relative, missing, or non-directory entry fails the plugin load loudly rather than granting nothing silently — unless `createMissingRoots` is set. An unset or empty variable fails the load with the variable's name, because expanding it to nothing would turn the entry into a different path. Entries are canonicalized (`realpath`) and deduplicated. A declared path is always **the host directory**: if the runner hides it behind a private mount (bwrap's `/tmp` tmpfs), that mount is replaced by a bind of the host path, so the shell and the file tools see one directory and its contents persist across calls. |
 | `applyInReadOnly` | `false` | Whether the extra roots also apply under `read-only`. The default keeps that mode's model-visible contract ("cannot modify files") true. |
+| `createMissingRoots` | `false` | Whether an entry that does not exist yet is created (`0700`) instead of failing the load. For a directory the tool that owns it creates lazily — pnpm's `$XDG_RUNTIME_DIR/pnpm-store-operation-locks-<uid>` is created by the first store operation, which on a fresh boot happens *after* this row mounts — failing the load there would take the whole sandbox down, since this plugin is the only provider the composition mounts. Creation never applies to an entry that exists as a non-directory: that still fails loud. |
 | `cwd`, `diffBasisMaxBytes` | as `@deepseek-ai/dsh-fs-local` | Forwarded to the replacement filesystem backend. |
 | `runnerCommand`, `runnerFailureSignatures`, `probeTimeoutMs` | as `@deepseek-ai/dsh-sandbox-local` | Forwarded to the replacement sandbox provider. |
 
-Both own fields are volatile: editing them applies to the next confined call.
-A live edit that stops resolving grants nothing until it resolves again, so a
-configuration mistake can only narrow the sandbox.
+All four own fields are volatile: editing them applies to the next confined
+call. A live edit that stops resolving grants nothing until it resolves again,
+so a configuration mistake can only narrow the sandbox.
+
+A concrete case for `$VAR` plus `createMissingRoots` — the writable paths pnpm
+needs for its global store, which the shipped policy cannot express because
+they are outside every workspace:
+
+```yaml
+    writablePaths:
+      - '$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000'  # store lock files
+      - '~/.local/share/pnpm'                               # content-addressable store
+      - '~/.local/state/pnpm'                               # pnpm-state.json
+      - '~/.npm'                                            # npx cache
+    createMissingRoots: true
+```
+
 
 ## Semantics and limits
 
@@ -77,7 +95,9 @@ configuration mistake can only narrow the sandbox.
   shows the model.
 - **These roots are a deliberate hole.** A writable root is exactly as
   sensitive as the workspace: `~/.ssh` or `~/.config` would hand a session the
-  user's credentials. Keep the list to caches and build outputs.
+  user's credentials. Keep the list to caches and build outputs. A package store
+  (`~/.local/share/pnpm`, `~/.cargo`) is a cache a confined command can poison,
+  so grant one only when the tool that owns it actually runs inside the sandbox.
 - **A persisted `/tmp` is the host `/tmp`.** Declaring `/tmp` trades the
   runner's private per-call tmpfs for the real directory. That is what makes
   temp files persist, but it also means a confined command can read and modify

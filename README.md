@@ -12,7 +12,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `skills/<name>/SKILL.md` | User-global agent skills, scanned at `$DSH_HOME/skills` (rank 400, ahead of `~/.agents/skills`). |
 | `plugins/dsh-web-search-kagi/` | Kagi Search API v1 provider for `ctx.web` (TypeScript; see its README). |
 | `plugins/dsh-bash-shfmt/` | Web GUI decoration that shows bash commands reformatted with `shfmt` in the approval prompt and the bash tool row; see its README. |
-| `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (e.g. `~/.cache`); see its README. |
+| `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (`~/.cache`, `~/.cargo`, `/tmp`, and pnpm's store, state, `~/.npm` and runtime lock directories); see its README. |
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus encrypted standalone secrets (e.g. `github_token` for the MCP row). |
 | `credentials.sops.yaml` | Encrypted copy of the harness credential store. |
