@@ -1,9 +1,9 @@
 ---
 name: lab-gitlab-ci
-description: Which GitLab runner tag to use for a job on lab.home.5kw.li — untagged runs plain unprivileged ubuntu, `nix` gets the host nix daemon and store, `buildkit` builds images with rootless buildkit. Use when writing or reviewing .gitlab-ci.yml on this GitLab.
+description: Conventions for lab.home.5kw.li — which GitLab runner tag a job needs (untagged runs plain unprivileged ubuntu, `nix` gets the host nix daemon and store, `buildkit` builds images with rootless buildkit), and that repositories created there must be public. Use when writing or reviewing .gitlab-ci.yml on that GitLab, or creating a repository there.
 ---
 
-# GitLab runner tags (lab.home.5kw.li)
+# GitLab on lab.home.5kw.li
 
 | Job needs | `tags:` | What runs |
 | --- | --- | --- |
@@ -16,3 +16,8 @@ description: Which GitLab runner tag to use for a job on lab.home.5kw.li — unt
 - Untagged jobs get the ubuntu runner — **no nix there**, so a nix job must be tagged `[nix]`.
 
 Tags live on the runner records in GitLab, not in the `nixos-config` repo.
+
+## New repositories are public
+
+Create them public: `glab repo create <name> --public` (the CLI's default is *internal*), or
+`visibility=public` through the API. Never create an internal or private project here.
