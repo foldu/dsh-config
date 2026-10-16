@@ -1,5 +1,5 @@
 ---
-name: gitlab-runner
+name: lab-gitlab-ci
 description: Which GitLab runner tag to use for a job on lab.home.5kw.li — untagged runs plain unprivileged ubuntu, `nix` gets the host nix daemon and store, `buildkit` builds images with rootless buildkit. Use when writing or reviewing .gitlab-ci.yml on this GitLab.
 ---
 
