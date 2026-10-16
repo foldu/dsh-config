@@ -9,6 +9,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | --- | --- |
 | `profiles/<name>/cordis.patch.yml` | The profile's own patch layer — the file to edit. |
 | `profiles/<name>/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml,cordis.yml}` | Profile manifest and its plugin dependencies. |
+| `skills/<name>/SKILL.md` | User-global agent skills, scanned at `$DSH_HOME/skills` (rank 400, ahead of `~/.agents/skills`). |
 | `plugins/dsh-web-search-kagi/` | Kagi Search API v1 provider for `ctx.web` (TypeScript; see its README). |
 | `plugins/dsh-bash-shfmt/` | Web GUI decoration that shows bash commands reformatted with `shfmt` in the approval prompt and the bash tool row; see its README. |
 | `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (e.g. `~/.cache`); see its README. |
