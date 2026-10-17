@@ -57,9 +57,9 @@
         displayName: OpenRouter
         apiKeyEnv: OPENROUTER_API_KEY
         models:
-          # One model today; add ids to taste (keep `:batch` variants out —
-          # they are async batch endpoints, not interactive models).
           - id: z-ai/glm-5.3-flash
+          - id: z-ai/glm-5.3
+          - id: moonshotai/kimi-k3
 
 # GitHub's official MCP server through a stdio bridge. bin/sops-run.mjs decrypts
 # secrets.sops.yaml into mcp-remote's environment only, and mcp-remote expands
