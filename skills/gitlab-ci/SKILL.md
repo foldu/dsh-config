@@ -38,7 +38,17 @@ Leave the branch-versus-MR decision to `workflow`; do not repeat it in job rules
 
 ## Container images
 
-Name images fully qualified, registry host included: `docker.io/alpine`,
-`docker.io/library/node:22`, `ghcr.io/owner/tool`. A bare `alpine` resolves through whatever
-default registry the runner has configured, and the job log prints the resolved form back
-(`Using Docker executor with image docker.io/alpine`) — write that.
+**Always use fully qualified image names** — registry host plus repository — in `image:` and in
+every `services:` entry:
+
+```yaml
+image: docker.io/library/node:22
+services:
+  - docker.io/library/docker:27-dind
+```
+
+Official Docker Hub images need the `docker.io/library/` prefix; any other registry its own host
+(`ghcr.io/owner/tool`). A bare `alpine` resolves through whatever default registry the runner is
+configured with, so the same file can mean a different image on a different runner. The job log
+prints the resolved form back (`Using Docker executor with image docker.io/alpine`) — that is the
+check.
