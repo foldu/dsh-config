@@ -3,16 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 1. Decrypt the harness credential store (the harness reads plaintext).
-if [ ! -f .credentials.yaml ]; then
-  if [ -f credentials.sops.yaml ]; then
-    sops -d credentials.sops.yaml > .credentials.yaml
-    chmod 600 .credentials.yaml
-    echo "wrote .credentials.yaml from credentials.sops.yaml"
-  else
-    echo "note: no credentials.sops.yaml; add keys via the GUI or by hand" >&2
-  fi
+# 1. There is nothing to decrypt: secrets.sops.yaml is read directly by
+#    dsh-sops-credentials, in memory. It needs the age identity at
+#    ~/.config/sops/age/keys.txt (or SOPS_AGE_KEY_FILE) and the `sops` binary.
+if [ ! -f secrets.sops.yaml ]; then
+  echo "FAIL: secrets.sops.yaml is missing; it is the only credential document" >&2
+  exit 1
 fi
+sops -d --output-type json secrets.sops.yaml > /dev/null   || { echo "FAIL: cannot decrypt secrets.sops.yaml (is the age key present?)" >&2; exit 1; }
 
 # 2. Build the local plugins: the harness loads lib/index.js, which is not tracked.
 for plugin in plugins/*/; do
@@ -29,7 +27,7 @@ done
 
 # 4. Verify the composition sees the plugins.
 dump=$(dsh --profile web --dump-config)
-for plugin in web-search-kagi bash-shfmt extra-writable-roots claude-copilot-brand; do
+for plugin in web-search-kagi bash-shfmt extra-writable-roots claude-copilot-brand sops-credentials; do
   case "$dump" in
     *"$plugin"*) echo "ok: web profile composes $plugin" ;;
     *) echo "FAIL: web profile does not compose $plugin" >&2; exit 1 ;;

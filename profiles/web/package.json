@@ -5,6 +5,7 @@
     "dsh-bash-shfmt": "link:../../plugins/dsh-bash-shfmt",
     "dsh-claude-copilot-brand": "link:../../plugins/dsh-claude-copilot-brand",
     "dsh-extra-writable-roots": "link:../../plugins/dsh-extra-writable-roots",
+    "dsh-sops-credentials": "link:../../plugins/dsh-sops-credentials",
     "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi"
   },
   "dsh": {

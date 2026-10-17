@@ -4,9 +4,11 @@ set -eu
 
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 
-# 1. Never commit the decrypted credential store.
+# 1. Never commit the decrypted credential store. The single SOPS document is
+# the source; bin/secrets-sync.sh promotes anything the harness wrote and
+# removes this file.
 if printf '%s\n' "$staged" | grep -qx '.credentials.yaml'; then
-  echo "pre-commit: refusing .credentials.yaml — run bin/secrets-encrypt.sh instead" >&2
+  echo "pre-commit: refusing .credentials.yaml — run bin/secrets-sync.sh instead" >&2
   exit 1
 fi
 

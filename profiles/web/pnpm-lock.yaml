@@ -17,6 +17,9 @@ importers:
       dsh-extra-writable-roots:
         specifier: link:../../plugins/dsh-extra-writable-roots
         version: link:../../plugins/dsh-extra-writable-roots
+      dsh-sops-credentials:
+        specifier: link:../../plugins/dsh-sops-credentials
+        version: link:../../plugins/dsh-sops-credentials
       dsh-web-search-kagi:
         specifier: link:../../plugins/dsh-web-search-kagi
         version: link:../../plugins/dsh-web-search-kagi

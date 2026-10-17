@@ -10,7 +10,7 @@
 # checkout at plugins/dsh-web-search-kagi (repo-local).
 - insert:
     - id: web-search-kagi
-      name: 'dsh-web-search-kagi'
+      name: "dsh-web-search-kagi"
 
 # Pin the web seam's search to Kagi. A patch replaces the row's whole config,
 # so fetchProvider is restated to keep web_fetch on the shipped HTTP backend.
@@ -23,27 +23,78 @@
 - id: web-search-deepseek
   disabled: true
 
-# GitHub's official MCP server, remote (hosted) variant — no local process.
-# Requires github_token in $DSH_HOME/secrets.sops.yaml (read at mount time via
-# sops, so no secret ever lives in this file). Published: dsh-mcp-client maps
-# its tools to mcp__github__<tool>.
+# Credential references and records from SOPS (dsh-sops-credentials, plugins/).
+#
+# secrets.sops.yaml is the only credential document: references at the top
+# level, durable records under `records:`. It is decrypted into memory once at
+# startup and re-decrypted when the file changes, so no plaintext copy exists —
+# no .env, no .credentials.yaml. A `set` on a SOPS-backed reference is refused
+# rather than silently shadowed; edit the document (sops secrets.sops.yaml).
+#
+# The plaintext store underneath is still mounted because the harness writes
+# records at runtime (a sign-in) that the read-only document cannot accept;
+# promote those with bin/secrets-sync.sh, which also deletes the plaintext file.
+- id: credentials
+  disabled: true
+- insert:
+    - id: credentials-sops
+      name: "dsh-sops-credentials"
+      config:
+        sopsFile: !!js dshHomePath('secrets.sops.yaml')
+        ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
+
+# OpenRouter through the pi-ai adapter (already mounted as `llm-pi-ai`, dormant
+# without routes). The catalog carries ~390 models across two protocols; `models`
+# replaces it wholesale, so this is the filter — each entry needs only its id and
+# inherits context window, output cap, image support and reasoning levels from
+# the installed catalog. Add or drop ids to taste; `:batch` variants are async
+# batch endpoints and belong nowhere near an interactive agent. The key comes
+# from secrets.sops.yaml as OPENROUTER_API_KEY.
+- id: llm-pi-ai
+  config:
+    providers:
+      openrouter:
+        displayName: OpenRouter
+        apiKeyEnv: OPENROUTER_API_KEY
+        models:
+          # One model today; add ids to taste (keep `:batch` variants out —
+          # they are async batch endpoints, not interactive models).
+          - id: z-ai/glm-5.3-flash
+
+# GitHub's official MCP server through a stdio bridge. bin/sops-run.mjs decrypts
+# secrets.sops.yaml into mcp-remote's environment only, and mcp-remote expands
+# ${GITHUB_TOKEN} into the header it sends; the token never enters the harness
+# process, this file, or any plaintext file. dsh-mcp-client maps the server's
+# tools to mcp__github__<tool>.
 - insert:
     - id: mcp-github
-      name: '@deepseek-ai/dsh-mcp-client'
+      name: "@deepseek-ai/dsh-mcp-client"
       config:
         serverName: github
-        transport: streamable-http
-        url: https://api.githubcopilot.com/mcp/
-        headers:
-          Authorization: !!js >-
-            (() => {
-              const { execFileSync } = process.getBuiltinModule('node:child_process');
-              const token = execFileSync('sops', ['-d', '--extract', '["github_token"]', dshHomePath('secrets.sops.yaml')], { encoding: 'utf8' }).trim();
-              if (!token || token === 'REPLACE_ME') throw new Error('dsh: github_token is unset in ' + dshHomePath('secrets.sops.yaml') + ' — run: sops ' + dshHomePath('secrets.sops.yaml'));
-              return 'Bearer ' + token;
-            })()
+        transport: stdio
+        command: node
+        args:
+          - !!js dshHomePath('bin', 'sops-run.mjs')
+          - !!js dshHomePath('secrets.sops.yaml')
+          # Only GITHUB_TOKEN reaches the child; the rest of the document
+          # stays in the harness process.
+          - "--only"
+          - "GITHUB_TOKEN"
+          - npx
+          - "-y"
+          - mcp-remote
+          - "https://api.githubcopilot.com/mcp/"
+          - "--header"
+          - "Authorization: Bearer ${GITHUB_TOKEN}"
           # Read-only toolset; drop this header for write access.
-          X-MCP-Readonly: 'true'
+          - "--header"
+          - "X-MCP-Readonly: true"
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # Deliberately NOT failOnStartupError: an MCP server that cannot reach
+        # the network must leave the harness up and tool-less, not crash-loop
+        # the whole GUI. The client retries in the background.
 
 # Extra sandbox writable roots (dsh-extra-writable-roots). This list lives in
 # the profile patch rather than the bundle's own patch because HMR watches this
@@ -64,17 +115,17 @@
 - id: extra-writable-roots
   config:
     writablePaths:
-      - '~/.cache'
-      - '~/.cargo'
+      - "~/.cache"
+      - "~/.cargo"
       - /tmp
       # pnpm store lock files (uid 1000's per-login runtime directory).
-      - '$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000'
+      - "$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000"
       # pnpm's content-addressable store.
-      - '~/.local/share/pnpm'
+      - "~/.local/share/pnpm"
       # pnpm-state.json (the update-notifier state).
-      - '~/.local/state/pnpm'
+      - "~/.local/state/pnpm"
       # npx/npm cache, which `npx mcp-remote` writes.
-      - '~/.npm'
+      - "~/.npm"
     applyInReadOnly: false
     createMissingRoots: true
 
@@ -97,40 +148,60 @@
 - id: hmr
   config:
     root:
-      - '../../plugins'
+      - "../../plugins"
 - id: session-log-deepseek
   name: "@deepseek-ai/dsh-session-log-deepseek"
   config:
     enabled: false
 
 # GitLab MCP server (built into the GitLab instance at lab.home.5kw.li).
-# Unlike GitHub's, this one is OAuth-only: it has no PAT mode (the endpoint
-# answers PATs with an OAuth token error), so dsh-mcp-client cannot reach it
-# directly — it sends static headers and has no browser handshake. mcp-remote
-# bridges stdio to the remote HTTP endpoint and runs the OAuth authorization
-# code + PKCE flow itself, so the model sees this server like any other stdio
-# MCP server. The first connect prints an authorize URL and opens a browser;
-# after you approve once, the token is cached and later starts are unattended.
+#
+# This endpoint is OAuth-only — a personal access token is refused (403 for both
+# `Authorization: Bearer` and `PRIVATE-TOKEN`, and the `mcp` scope cannot be put
+# on a PAT), so mcp-remote bridges stdio to the remote HTTP endpoint and runs the
+# OAuth authorization-code + PKCE flow itself.
+#
+# The failure this row used to cause: with no cached token, every connection
+# starts a new flow, prints an authorize URL, and gives up — and with
+# failOnStartupError it took the whole harness down. It is now non-fatal and
+# mcp-client retries, so a dead token costs the GitLab tools, not the GUI.
+#
+# Approve once, in a terminal with a browser (this writes the token into the
+# same cache directory the row reads; the callback port is derived from the
+# server URL, so do not run it while the harness is connected to this server):
+#
+#   MCP_REMOTE_CONFIG_DIR=~/.cache/mcp-auth npx -y mcp-remote \
+#     https://lab.home.5kw.li/api/v4/mcp
+#
+# Then restart the harness. If the refresh token later dies, re-run that command
+# and restart again.
 - insert:
     - id: mcp-gitlab
-      name: '@deepseek-ai/dsh-mcp-client'
+      name: "@deepseek-ai/dsh-mcp-client"
       config:
         serverName: gitlab
         transport: stdio
         command: npx
         args:
-          - '-y'
-          - 'mcp-remote'
-          - 'https://lab.home.5kw.li/api/v4/mcp'
-        # Keep both caches under ~/.cache, a declared writable root, so the npx
-        # cache and the OAuth token cache are writable by the harness process
-        # and by a confined `npx mcp-remote` alike. mcp-remote otherwise
-        # defaults to ~/.mcp-auth, which no root grants.
+          - "-y"
+          - "mcp-remote"
+          - "https://lab.home.5kw.li/api/v4/mcp"
+        # Both caches under ~/.cache, a declared writable root, so the npx and
+        # OAuth token caches are writable by the harness process and by a
+        # confined `npx mcp-remote` alike.
         env:
           npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
           MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
-        # A failed connect is loud instead of a silently tool-less server.
-        failOnStartupError: true
+        # Non-fatal on purpose: a failed OAuth handshake must not take the
+        # harness down with it. Ten attempts, 30s ceiling, then quiet until the
+        # next mount — enough to ride out a restart or a network blip, not
+        # enough to spam authorize URLs forever.
+        reconnect:
+          enabled: true
+          maxAttempts: 10
+          initialDelayMs: 2000
+          maxDelayMs: 30000
+
 - id: ui-theme
   name: "@deepseek-ai/dsh-client-ui-theme"
   config:
