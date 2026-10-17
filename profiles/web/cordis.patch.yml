@@ -202,6 +202,37 @@
           initialDelayMs: 2000
           maxDelayMs: 30000
 
+# REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
+# native binaries, JavaScript/Electron apps, .NET assemblies and websites.
+# Static analysis needs nothing extra; decompilation drives an already-installed
+# Hopper, Ghidra, or IDA, and the Android/firmware paths use their own tools.
+# Pinned to 6.5.0 so a boot cannot silently swap the tool catalogue — bump it
+# deliberately. First launch downloads the package into ~/.cache/npm, a declared
+# writable root.
+- insert:
+    - id: mcp-rea
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: rea
+        transport: stdio
+        command: npx
+        args:
+          - "-y"
+          - "rea-agents@6.5.0"
+          - "mcp"
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+        # Analyses run for minutes (decompilation, tracing), so the default
+        # 60s tool-call bound would abort them mid-flight.
+        toolCallTimeoutMs: 600000
+        # Non-fatal like the other rows: a failed first download or a missing
+        # decompiler costs the REA tools, never the GUI.
+        reconnect:
+          enabled: true
+          maxAttempts: 5
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+
 - id: ui-theme
   name: "@deepseek-ai/dsh-client-ui-theme"
   config:
