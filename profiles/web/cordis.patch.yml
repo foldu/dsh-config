@@ -220,8 +220,20 @@
           - "-y"
           - "rea-agents@6.5.0"
           - "mcp"
-        env:
-          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+        # Ghidra and its JDK come from the Nix install. bin/ghidra-home.mjs
+        # resolves both store paths at mount, because the profile's `ghidra`
+        # launcher is an extension layer whose real install is a sibling store
+        # path. A missing Ghidra yields no variables (REA reports it
+        # unconfigured) rather than failing the row.
+        env: !!js >-
+          Object.fromEntries([
+            ["npm_config_cache", dshHomePath('..', '.cache', 'npm')],
+            ...process.getBuiltinModule('node:child_process')
+              .execFileSync(process.execPath, [dshHomePath('bin', 'ghidra-home.mjs')], { encoding: "utf8" })
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => line.split("=")),
+          ])
         # Analyses run for minutes (decompilation, tracing), so the default
         # 60s tool-call bound would abort them mid-flight.
         toolCallTimeoutMs: 600000
