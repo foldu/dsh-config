@@ -1,0 +1,46 @@
+{
+  "name": "dsh-expand-all",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reading mode for the Web GUI: one header toggle that keeps every collapsed disclosure (tool calls, details) expanded as the conversation streams",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "client",
+    "conversation"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "node --check index.js && node --check client.js",
+    "typecheck": "node --check index.js && node --check client.js",
+    "test": "node --check index.js && node --check client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+# dsh bundle patch: inserts the reading-mode toggle into a profile's stack.
+#
+# The Client half registers one cell in `conversation.session.header.actions`;
+# nothing else is claimed, so the shipped header controls keep their places.
+- insert:
+    - id: expand-all
+      name: 'dsh-expand-all'

@@ -4,6 +4,7 @@
   "dependencies": {
     "dsh-bash-shfmt": "link:../../plugins/dsh-bash-shfmt",
     "dsh-claude-copilot-brand": "link:../../plugins/dsh-claude-copilot-brand",
+    "dsh-expand-all": "link:../../plugins/dsh-expand-all",
     "dsh-extra-writable-roots": "link:../../plugins/dsh-extra-writable-roots",
     "dsh-sops-credentials": "link:../../plugins/dsh-sops-credentials",
     "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi"
@@ -16,7 +17,8 @@
         "@deepseek-ai/dsh-experimental-auto-review",
         "dsh-bash-shfmt",
         "dsh-extra-writable-roots",
-        "dsh-claude-copilot-brand"
+        "dsh-claude-copilot-brand",
+        "dsh-expand-all"
       ]
     }
   }
