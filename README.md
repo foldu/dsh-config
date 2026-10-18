@@ -16,7 +16,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from `secrets.sops.yaml`, decrypted in memory at startup; see its README. |
 | `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus the **single** encrypted credential document: API keys at the top level, durable records under `records:`. |
-| `bin/` | Bootstrap, secrets sync, and the `sops-run.mjs` child-environment helper. |
+| `bin/` | Bootstrap, secrets sync, plugin version sync (`update-plugins.mjs`), and the `sops-run.mjs` child-environment helper. |
 | `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
 
 A root `AGENTS.md` is deliberately absent: `$DSH_HOME/AGENTS.md` is the
@@ -43,6 +43,37 @@ git clone <this repo> ~/.dsh
 Then restart the harness. Configuration reloads live, but a newly linked or
 moved plugin module only mounts on a restart — which is why bootstrap builds
 every local plugin's build output (`lib/`), which is not committed.
+
+## Updating after a harness upgrade
+
+The local plugins pin their `@deepseek-ai/dsh-*` peers exactly, because the
+harness refuses to load a plugin whose peer range does not satisfy the running
+version. A harness upgrade therefore needs every plugin manifest and lockfile
+refreshed. Do that with:
+
+```sh
+bin/update-plugins.mjs
+```
+
+The script derives the target versions from the installed harness itself (the
+running `dsh` version plus the harness's cordis/schemastery ranges), rewrites
+every `@deepseek-ai/dsh-*` dependency in `plugins/*/package.json`, runs
+`pnpm install` for the changed plugins, rebuilds them, and composes each profile
+to check for remaining incompatibilities. It skips installs and builds when
+nothing changed, so it is safe to re-run.
+
+```sh
+bin/update-plugins.mjs --check       # exit 1 if any manifest is stale
+bin/update-plugins.mjs --no-build    # only rewrite manifests and lockfiles
+```
+
+A manifest bump only clears the compatibility gate; if a plugin actually uses a
+changed harness API, the rebuild fails and the source needs a real fix. pnpm's
+global `minimumReleaseAge` would otherwise reject a harness published minutes
+ago, so the script exempts the `@deepseek-ai/*` scope for these installs
+(`--allow-fresh` disables the age gate for the whole install instead). If
+automatic harness discovery fails, pass
+`--dsh-package /path/to/@deepseek-ai/dsh/package.json`.
 
 ## Secrets
 

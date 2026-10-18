@@ -40,6 +40,9 @@ Write plugin and harness code in TypeScript, not JavaScript.
   `cordis.yml` — the launcher regenerates it.
 - Verify with `pnpm typecheck`, `pnpm test`, and
   `dsh --profile <name> --dump-config`.
+- After a DSH upgrade, run `bin/update-plugins.mjs` (or `--check` to report
+  drift) before verifying: the plugins pin exact `@deepseek-ai/dsh-*` peers,
+  and the harness refuses incompatible versions.
 - On a fresh clone, run `bin/bootstrap.sh`: build output is not committed, so
   the plugin has no `lib/` until it runs.
 
