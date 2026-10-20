@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Build output: produced by `pnpm build` (or $DSH_HOME/bin/bootstrap.sh),
+# never committed — the harness loads it from the working tree.
+/lib/

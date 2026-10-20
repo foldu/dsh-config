@@ -14,8 +14,9 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `plugins/dsh-bash-shfmt/` | Web GUI decoration that shows bash commands reformatted with `shfmt` in the approval prompt and the bash tool row; see its README. |
 | `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (`~/.cache`, `~/.cargo`, `/tmp`, and pnpm's store, state, `~/.npm` and runtime lock directories); see its README. |
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
+| `plugins/dsh-coauthor-identity/` | Tells the model selected in the composer who it is and the `Co-authored-by:` trailer to append to git commits; see its README. |
 | `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from `secrets.sops.yaml`, decrypted in memory at startup; see its README. |
-| `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus the **single** encrypted credential document: API keys at the top level, durable records under `records:`. |
+| `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus the **single** encrypted credential document: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose — the age identity that reads it never leaves the machine it was generated on. |
 | `bin/` | Bootstrap, secrets sync, plugin version sync (`update-plugins.mjs`), and the `sops-run.mjs` child-environment helper. |
 | `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
 
@@ -27,13 +28,38 @@ machine, so repo-scoped agent rules live in `plugins/AGENTS.md` instead.
 
 `sessions/`, `storages/`, `logs/`, `attachments/`, `cache/`, `llm-deepseek/` and
 `.anonymous-user-id` (private runtime state), `.credentials.yaml` (a plaintext
-store this setup normally deletes), and every `node_modules/`.
+store this setup normally deletes), every `node_modules/`, and two things that
+exist only for this deployment: the home-layer overlay `cordis.patch.yml`
+(described below) and `skills/lab-gitlab-ci/`, which documents one internal
+GitLab and stays on disk but is never published.
+
+## Machine-local overlay
+
+The loader applies layers in this order: each bundle, then the profile's
+`cordis.patch.yml`, then `$DSH_HOME/cordis.patch.yml` (the home layer), then any
+`--patch` CLI overlay. The home layer is untracked, which makes it the place for
+rows that only make sense on this machine — above all anything naming a host
+that is not reachable from outside this network.
+
+The GitLab MCP row lives there now, not in `profiles/web/`. Add a row the same
+way you would in the profile patch:
+
+```yaml
+# $DSH_HOME/cordis.patch.yml — untracked
+- insert:
+    - id: mcp-gitlab
+      name: "@deepseek-ai/dsh-mcp-client"
+      config: { … }
+```
+
+A clone without the file composes fine: the row is simply absent, and nothing in
+the tracked config depends on it.
 
 ## Restore on a fresh machine
 
-Prerequisites: `dsh`, `pnpm`, `node`, `sops`, and the age identity at
-`~/.config/sops/age/keys.txt`. Without that identity no credential resolves:
-every key, and the browser-session record, lives in `secrets.sops.yaml`.
+Prerequisites: `dsh`, `pnpm`, `node`, `sops`. With the age identity at
+`~/.config/sops/age/keys.txt` every credential resolves; without it the harness
+still boots and credentials stay unresolved — see the next section.
 
 ```sh
 git clone <this repo> ~/.dsh
@@ -43,6 +69,54 @@ git clone <this repo> ~/.dsh
 Then restart the harness. Configuration reloads live, but a newly linked or
 moved plugin module only mounts on a restart — which is why bootstrap builds
 every local plugin's build output (`lib/`), which is not committed.
+
+## Using this repo somewhere else
+
+On a machine that is not the one it was written for — a work laptop, a fresh
+box — three things differ, all of them by design:
+
+1. **The age identity is absent**, so `secrets.sops.yaml` cannot be decrypted
+   here. That is what makes it safe to publish: the ciphertext is public, the
+   key is not. Create a document for this machine instead. Either add your
+   public key and re-key where the old key is available
+   (`sops updatekeys secrets.sops.yaml`), or start a fresh document holding only
+   what this machine needs:
+
+   ```sh
+   age-keygen -o ~/.config/sops/age/keys.txt   # a new identity
+   # put its age1… public key in .sops.yaml, then:
+   sops secrets.sops.yaml                      # create/edit; encrypts on save
+   ```
+
+   `bootstrap.sh` warns rather than fails when the document cannot be read, so
+   the rest of the restore still completes.
+
+2. **The home layer is absent**, so internal-host rows are absent too. Add
+   whatever this machine needs in `$DSH_HOME/cordis.patch.yml`.
+
+3. **Internal-only skills are absent** — nothing describing a private instance
+   is published.
+
+Everything else — profiles, plugins, skills, credential plumbing, the
+`Co-authored-by:` trailer table — is generic and composes unchanged.
+
+## Publishing
+
+The tracked tree is meant to be publishable to a public remote. The invariants
+that keep it that way:
+
+- No plaintext credential has ever been committed. `secrets.sops.yaml` is
+  ciphertext; never commit the age identity, `.credentials.yaml`, or a decrypted
+  export. `.githooks/pre-commit` blocks the obvious cases.
+- No tracked file names an internal host. That is why the home layer and the
+  internal-only skill are gitignored.
+- `bin/bootstrap.sh` passes from a clean clone.
+
+```sh
+git config core.hooksPath .githooks      # once per clone
+git remote add public git@github.com:<you>/dsh-config.git
+git push public master
+```
 
 ## Updating after a harness upgrade
 

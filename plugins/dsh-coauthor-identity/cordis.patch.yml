@@ -1,0 +1,29 @@
+# Co-author identity for the model selected in the UI.
+#
+# Inserts one Host row that registers a system-prompt section: it names the
+# model currently selected in the composer and the exact `Co-authored-by:`
+# trailer to append to git commits. The row resolves the selection against
+# `coAuthors` at every assembly, so switching models through the UI changes what
+# the model is told on its next step.
+#
+# The deployment's identities belong in the *profile* patch layer, not here:
+# HMR watches `profiles/<name>/cordis.patch.yml`, so an edit there applies to the
+# next assembly, while editing this file only changes what a fresh composition
+# reads. Override the row like this:
+#
+#   - id: coauthor-identity
+#     config:
+#       coAuthors:
+#         "deepseek-official/deepseek-flash":
+#           name: DeepSeek-V4.1-Flash
+#           email: noreply@deepseek.com
+#
+# Keys are the exact `provider/model` pair the picker selects; a bare model id
+# matches any provider, and `*` is the last resort. An empty map registers the
+# section with no text, so the model is told nothing until a selection has an
+# identity.
+- insert:
+    - id: coauthor-identity
+      name: 'dsh-coauthor-identity'
+      config:
+        coAuthors: {}

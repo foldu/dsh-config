@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Co-author identity",
+    "description": "Tells the model selected in the composer who it is and which Co-authored-by trailer to append to git commits"
+  }
+}

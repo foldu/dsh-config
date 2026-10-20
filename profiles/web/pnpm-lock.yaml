@@ -14,6 +14,9 @@ importers:
       dsh-claude-copilot-brand:
         specifier: link:../../plugins/dsh-claude-copilot-brand
         version: link:../../plugins/dsh-claude-copilot-brand
+      dsh-coauthor-identity:
+        specifier: link:../../plugins/dsh-coauthor-identity
+        version: link:../../plugins/dsh-coauthor-identity
       dsh-expand-all:
         specifier: link:../../plugins/dsh-expand-all
         version: link:../../plugins/dsh-expand-all

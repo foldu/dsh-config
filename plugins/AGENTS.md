@@ -57,7 +57,7 @@ boot. Ask the user to restart the harness after adding or moving one.
 - `.credentials.yaml` is plaintext and gitignored. Never commit it, print its
   values, or paste them into logs or commit messages.
 - Encrypted secrets live in `*.sops.yaml` (age). Refresh the credential
-  snapshot with `bin/secrets-encrypt.sh` after the harness changes a key.
+  snapshot with `bin/secrets-sync.sh` after the harness changes a key.
 - `.githooks/pre-commit` blocks the decrypted store, absolute `link:` specs and
   likely plaintext tokens; enable it once per clone with
   `git config core.hooksPath .githooks`.

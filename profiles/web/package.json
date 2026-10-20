@@ -4,6 +4,7 @@
   "dependencies": {
     "dsh-bash-shfmt": "link:../../plugins/dsh-bash-shfmt",
     "dsh-claude-copilot-brand": "link:../../plugins/dsh-claude-copilot-brand",
+    "dsh-coauthor-identity": "link:../../plugins/dsh-coauthor-identity",
     "dsh-expand-all": "link:../../plugins/dsh-expand-all",
     "dsh-extra-writable-roots": "link:../../plugins/dsh-extra-writable-roots",
     "dsh-sops-credentials": "link:../../plugins/dsh-sops-credentials",
@@ -18,6 +19,7 @@
         "dsh-bash-shfmt",
         "dsh-extra-writable-roots",
         "dsh-claude-copilot-brand",
+        "dsh-coauthor-identity",
         "dsh-expand-all"
       ]
     }

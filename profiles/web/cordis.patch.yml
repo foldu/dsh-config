@@ -154,53 +154,9 @@
   config:
     enabled: false
 
-# GitLab MCP server (built into the GitLab instance at lab.home.5kw.li).
-#
-# This endpoint is OAuth-only — a personal access token is refused (403 for both
-# `Authorization: Bearer` and `PRIVATE-TOKEN`, and the `mcp` scope cannot be put
-# on a PAT), so mcp-remote bridges stdio to the remote HTTP endpoint and runs the
-# OAuth authorization-code + PKCE flow itself.
-#
-# The failure this row used to cause: with no cached token, every connection
-# starts a new flow, prints an authorize URL, and gives up — and with
-# failOnStartupError it took the whole harness down. It is now non-fatal and
-# mcp-client retries, so a dead token costs the GitLab tools, not the GUI.
-#
-# Approve once, in a terminal with a browser (this writes the token into the
-# same cache directory the row reads; the callback port is derived from the
-# server URL, so do not run it while the harness is connected to this server):
-#
-#   MCP_REMOTE_CONFIG_DIR=~/.cache/mcp-auth npx -y mcp-remote \
-#     https://lab.home.5kw.li/api/v4/mcp
-#
-# Then restart the harness. If the refresh token later dies, re-run that command
-# and restart again.
-- insert:
-    - id: mcp-gitlab
-      name: "@deepseek-ai/dsh-mcp-client"
-      config:
-        serverName: gitlab
-        transport: stdio
-        command: npx
-        args:
-          - "-y"
-          - "mcp-remote"
-          - "https://lab.home.5kw.li/api/v4/mcp"
-        # Both caches under ~/.cache, a declared writable root, so the npx and
-        # OAuth token caches are writable by the harness process and by a
-        # confined `npx mcp-remote` alike.
-        env:
-          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
-          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
-        # Non-fatal on purpose: a failed OAuth handshake must not take the
-        # harness down with it. Ten attempts, 30s ceiling, then quiet until the
-        # next mount — enough to ride out a restart or a network blip, not
-        # enough to spam authorize URLs forever.
-        reconnect:
-          enabled: true
-          maxAttempts: 10
-          initialDelayMs: 2000
-          maxDelayMs: 30000
+# GitLab MCP is NOT here on purpose: its endpoint is a host on the home network,
+# so that row lives in the untracked home layer (`$DSH_HOME/cordis.patch.yml`),
+# which is applied after this file. See README, "Machine-local overlay".
 
 # REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
 # native binaries, JavaScript/Electron apps, .NET assemblies and websites.
@@ -244,6 +200,36 @@
           maxAttempts: 5
           initialDelayMs: 1000
           maxDelayMs: 30000
+
+# Co-author identity (dsh-coauthor-identity, plugins/). The composer's model
+# picker is the source of truth: the plugin reads the Agent's live
+# provider/model at each prompt assembly, tells the model who it is running as,
+# and supplies the exact `Co-authored-by:` trailer to append to a git commit.
+# Keys are the exact `provider/model` pair the picker stores; a bare model id
+# matches any provider, and `*` is the last resort. An unlisted selection
+# contributes no text, so a newly added model is never credited as the wrong
+# vendor — add its pair here. Addresses are deployment choices: the model
+# catalog carries display names but no co-author addresses.
+- id: coauthor-identity
+  config:
+    coAuthors:
+      # Bare model ids match either official DeepSeek route
+      # (deepseek-official for the API key, deepseek-account for sign-in).
+      "deepseek-flash":
+        name: DeepSeek-V4.1-Flash
+        email: noreply@deepseek.com
+      "deepseek-v4-pro":
+        name: DeepSeek-V4-Pro
+        email: noreply@deepseek.com
+      "openrouter/z-ai/glm-5.3-flash":
+        name: GLM-5.3-Flash
+        email: noreply@z.ai
+      "openrouter/z-ai/glm-5.3":
+        name: GLM-5.3
+        email: noreply@z.ai
+      "openrouter/moonshotai/kimi-k3":
+        name: Kimi K3
+        email: noreply@moonshot.ai
 
 - id: ui-theme
   name: "@deepseek-ai/dsh-client-ui-theme"

@@ -1,0 +1,8 @@
+# Build-script and maturity decisions for this package's dependencies.
+#
+# Every `@deepseek-ai/dsh-*` peer is pinned to the running harness version, which
+# is often newer than the profile's `minimumReleaseAge` window. Without this
+# exemption `bin/bootstrap.sh` would abort on a fresh clone until the release
+# matures, even though the version is exactly the one the harness requires.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/*'

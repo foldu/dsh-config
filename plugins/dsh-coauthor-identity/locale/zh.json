@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "协作者身份",
+    "description": "告知编辑器中所选模型它是谁，以及在 git 提交信息中追加哪一条 Co-authored-by 尾注"
+  }
+}

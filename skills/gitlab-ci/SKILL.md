@@ -1,6 +1,6 @@
 ---
 name: gitlab-ci
-description: Conventions for .gitlab-ci.yml — the mandatory workflow rules that stop a branch with an open merge request from running two pipelines (and the pipeline sources those rules exclude), job rules, and fully qualified container images. Use when writing or reviewing .gitlab-ci.yml; for runner tags on lab.home.5kw.li use the lab-gitlab-ci skill.
+description: Conventions for .gitlab-ci.yml — the mandatory workflow rules that stop a branch with an open merge request from running two pipelines (and the pipeline sources those rules exclude), job rules, and fully qualified container images. Use when writing or reviewing .gitlab-ci.yml; for the runner tags a specific self-hosted instance offers, consult that instance's own notes.
 ---
 
 # GitLab CI conventions
