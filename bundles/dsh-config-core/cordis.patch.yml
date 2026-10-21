@@ -2,8 +2,10 @@
 # before the profile's own `cordis.patch.yml`, so a profile overrides any row
 # below by id (a patch replaces the row's whole config, never a deep merge).
 #
-# What is deliberately not here: the model list (`llm-pi-ai`). That is the one
-# thing a profile exists to change, and `models` replaces the catalog wholesale.
+# What is deliberately not here: the model list (`llm-pi-ai`), and the
+# credential pair — the `credentials-sops` row and the GitHub MCP bridge that
+# decrypts the same document. Both are per profile, because each profile names
+# its own `secrets.<profile>.sops.yaml`; a shared row would have to guess.
 #
 # HMR is not watching anything right now (the `hmr` row keeps its shipped
 # default, an empty `root`), which is why the sandbox's writable roots live here
@@ -40,76 +42,22 @@
 
 # Credential references and records from SOPS (dsh-sops-credentials, plugins/).
 #
-# One credential document is mounted, references at the top level and durable
-# records under `records:`. Which file that is follows one rule: a gitignored
-# `secrets.local.sops.yaml` shadows the tracked `secrets.sops.yaml`. A clone
-# that does not hold the tracked document's age identity drops in a local one
-# instead of editing a tracked file — see README, "Using this repo somewhere
-# else". bin/bootstrap.sh and the sync script apply the same precedence.
+# The plaintext store is disabled here because every profile mounts a SOPS
+# document instead, and the provider decrypts it into memory once at startup
+# and re-decrypts when the file changes — no .env, no .credentials.yaml, no
+# plaintext copy. A `set` on a SOPS-backed reference is refused rather than
+# silently shadowed; edit the document instead.
 #
-# It is decrypted into memory once at startup and re-decrypted when the file
-# changes, so no plaintext copy exists — no .env, no .credentials.yaml. A `set`
-# on a SOPS-backed reference is refused rather than silently shadowed; edit the
-# document instead (sops secrets.sops.yaml).
+# Which document is *not* decided here: each profile patch inserts the
+# `credentials-sops` row with its own `sopsFile` (`secrets.web.sops.yaml`,
+# `secrets.work.sops.yaml`) and inserts the GitHub bridge beside it, so the two
+# consumers of the path are written in one place and cannot disagree.
 #
-# The plaintext store underneath is still mounted because the harness writes
-# records at runtime (a sign-in) that the read-only document cannot accept;
-# promote those with bin/secrets-sync.sh, which also deletes the plaintext file.
+# The plaintext store is still why this row exists: the harness writes records
+# at runtime (a sign-in) that a read-only document cannot accept; promote those
+# with bin/secrets-sync.sh, which also deletes the plaintext file.
 - id: credentials
   disabled: true
-- insert:
-    - id: credentials-sops
-      name: "dsh-sops-credentials"
-      config:
-        # Which document: a gitignored machine-local one shadows the tracked
-        # one. Defined once and aliased by the sops-run child below, so the
-        # provider and the MCP bridge cannot disagree about which key is in
-        # play — at a clone without the tracked file's age identity, both must
-        # switch, or the child decrypts with a key that is not there.
-        # bin/bootstrap.sh and the sync script apply the same precedence.
-        sopsFile: &credentialDocument !!js >-
-          process.getBuiltinModule('node:fs').existsSync(dshHomePath('secrets.local.sops.yaml'))
-          ? dshHomePath('secrets.local.sops.yaml')
-          : dshHomePath('secrets.sops.yaml')
-        ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
-
-# GitHub's official MCP server through a stdio bridge. bin/sops-run.mjs decrypts
-# the credential document (the same file the provider mounts, via the anchor
-# above) into mcp-remote's environment only, and mcp-remote expands
-# ${GITHUB_TOKEN} into the header it sends; the token never enters the harness
-# process, this file, or any plaintext file. dsh-mcp-client maps the server's
-# tools to mcp__github__<tool>.
-- insert:
-    - id: mcp-github
-      name: "@deepseek-ai/dsh-mcp-client"
-      config:
-        serverName: github
-        transport: stdio
-        command: node
-        args:
-          - !!js dshHomePath('bin', 'sops-run.mjs')
-          # The same document the provider mounts — an alias of the anchor
-          # above, never a second copy of the path.
-          - *credentialDocument
-          # Only GITHUB_TOKEN reaches the child; the rest of the document
-          # stays in the harness process.
-          - "--only"
-          - "GITHUB_TOKEN"
-          - npx
-          - "-y"
-          - mcp-remote
-          - "https://api.githubcopilot.com/mcp/"
-          - "--header"
-          - "Authorization: Bearer ${GITHUB_TOKEN}"
-          # Read-only toolset; drop this header for write access.
-          - "--header"
-          - "X-MCP-Readonly: true"
-        env:
-          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
-          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
-        # Deliberately NOT failOnStartupError: an MCP server that cannot reach
-        # the network must leave the harness up and tool-less, not crash-loop
-        # the whole GUI. The client retries in the background.
 
 # Extra sandbox writable roots (dsh-extra-writable-roots). Each entry must exist
 # and be a directory, unless `createMissingRoots` is set; declaring /tmp also

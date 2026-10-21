@@ -1,20 +1,16 @@
 # The work profile. Everything it shares with `web` comes from the
-# `dsh-config-core` bundle; the only thing here is the model list, which is what
-# the profile exists to decide.
+# `dsh-config-core` bundle. What is here is what belongs to work:
 #
-# Credentials are *not* per profile: they are machine-scoped. This profile reads
-# whichever credential document is mounted in `$DSH_HOME` — the tracked
-# `secrets.sops.yaml`, or a gitignored `secrets.local.sops.yaml` when the
-# machine does not hold the tracked document's age identity. See README,
-# "Using this repo somewhere else".
+#   - the model list
+#   - its credential document, `secrets.work.sops.yaml`
 #
-# The GitLab MCP row is also machine-scoped: it lives in the untracked home
-# layer, so it points at whichever GitLab the machine can reach.
+# It has no REA and no GitLab row: those live in `profiles/web`, so running
+# `dsh work` never mounts a reverse-engineering server or the lab's GitLab.
 
 # Scaffold: these are the same ids `web` uses. Replace them with the models
 # reachable from work (an internal gateway would add its own provider below,
 # restating the whole `llm-pi-ai` config because a patch replaces it). The key
-# still comes from the credential document as OPENROUTER_API_KEY.
+# comes from the credential document as OPENROUTER_API_KEY.
 - id: llm-pi-ai
   config:
     providers:
@@ -25,3 +21,50 @@
           - id: z-ai/glm-5.3-flash
           - id: z-ai/glm-5.3
           - id: moonshotai/kimi-k3
+
+# This profile's credential document — a different file, and a different age
+# identity, from the home one. The path is written once and aliased by the
+# GitHub bridge below, so the provider and the child that decrypts it cannot
+# disagree.
+#
+# The document is created where the work key lives. See README, "Using this repo
+# somewhere else": seed it with that machine's key, then commit the ciphertext
+# (or keep it out of the repo entirely and create it on each clone).
+- insert:
+    - id: credentials-sops
+      name: "dsh-sops-credentials"
+      config:
+        sopsFile: &credentialDocument !!js dshHomePath('secrets.work.sops.yaml')
+        ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
+
+# GitHub's official MCP server through a stdio bridge, decrypting this profile's
+# document only. The token never enters the harness process, this file, or any
+# plaintext file; dsh-mcp-client maps the server's tools to mcp__github__<tool>.
+- insert:
+    - id: mcp-github
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: github
+        transport: stdio
+        command: node
+        args:
+          - !!js dshHomePath('bin', 'sops-run.mjs')
+          # The same document the provider mounts — an alias, never a second
+          # copy of the path.
+          - *credentialDocument
+          - "--only"
+          - "GITHUB_TOKEN"
+          - npx
+          - "-y"
+          - mcp-remote
+          - "https://api.githubcopilot.com/mcp/"
+          - "--header"
+          - "Authorization: Bearer ${GITHUB_TOKEN}"
+          # Read-only toolset; drop this header for write access.
+          - "--header"
+          - "X-MCP-Readonly: true"
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # Non-fatal: an MCP server that cannot reach the network must leave the
+        # harness up and tool-less, not crash-loop the GUI.

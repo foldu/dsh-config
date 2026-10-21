@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /**
- * Promote the harness's plaintext credential store into the single SOPS
+ * Promote the harness's plaintext credential store into a profile's SOPS
  * document, then delete the plaintext copy.
  *
  * The SOPS document is read-only to the running harness, which is deliberate:
  * a token refresh cannot re-encrypt a file. So a sign-in or a record the
  * harness writes lands in `$DSH_HOME/.credentials.yaml`; this script moves it
- * into `secrets.sops.yaml` (references at the top level, records under
- * `records:`) and removes the plaintext store. Run it after any sign-in, or on
- * a machine whose store predates the SOPS document.
+ * into that profile's document (`secrets.<profile>.sops.yaml` — references at
+ * the top level, records under `records:`) and removes the plaintext store. Run
+ * it after any sign-in, or on a machine whose store predates the SOPS document.
  *
- *   node scripts/sync.mjs [--sops <file>] [--store <file>] [--keep-store]
+ *   node scripts/sync.mjs [--profile <name>] [--sops <file>] [--store <file>] [--keep-store]
+ *
+ * `--profile` picks the document (default `web`); `--sops` overrides it.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -22,18 +23,19 @@ import YAML from 'yaml';
 /**
  * Parse `--flag value` pairs.
  * @param {string[]} argv - process arguments after the script name.
- * @returns {{ sops?: string, store?: string, keepStore: boolean }}
+ * @returns {{ sops?: string, store?: string, profile?: string, keepStore: boolean }}
  */
 function parseArgs(argv) {
 	const options = { keepStore: false };
 	for (let index = 0; index < argv.length; index += 1) {
 		const flag = argv[index];
 		if (flag === '--keep-store') options.keepStore = true;
-		else if (flag === '--sops' || flag === '--store') {
+		else if (flag === '--sops' || flag === '--store' || flag === '--profile') {
 			const value = argv[index + 1];
-			if (value === undefined) throw new Error(`${flag} needs a path`);
+			if (value === undefined) throw new Error(`${flag} needs a value`);
 			if (flag === '--sops') options.sops = value;
-			else options.store = value;
+			else if (flag === '--store') options.store = value;
+			else options.profile = value;
 			index += 1;
 		} else throw new Error(`unknown argument: ${flag}`);
 	}
@@ -43,19 +45,17 @@ function parseArgs(argv) {
 /** Absolute path of this machine's harness home. */
 const dshHome = resolve(process.env.DSH_HOME ?? join(homedir(), '.dsh'));
 /**
- * The credential document this machine actually mounts: a gitignored local
- * document shadows the tracked one. This is the same precedence the shared
- * bundle's provider row and bin/bootstrap.sh apply, and it matters here —
- * syncing a machine's store into the tracked document would write its secrets
- * into a tracked file.
+ * The credential document a profile mounts. Each profile names its own, so the
+ * selection is the profile name — no file is shadowed by another's presence.
+ * `--profile` (or `--sops`) overrides the default, and selecting the wrong one
+ * would merge this machine's store into another profile's document.
  * @returns {string} absolute path to the document to merge into.
  */
-function defaultDocument() {
-	const local = join(dshHome, 'secrets.local.sops.yaml');
-	return existsSync(local) ? local : join(dshHome, 'secrets.sops.yaml');
+function documentForProfile(profile) {
+	return join(dshHome, `secrets.${profile}.sops.yaml`);
 }
 const options = parseArgs(process.argv.slice(2));
-const sopsFile = resolve(options.sops ?? defaultDocument());
+const sopsFile = resolve(options.sops ?? documentForProfile(options.profile ?? 'web'));
 const storeFile = resolve(options.store ?? join(dshHome, '.credentials.yaml'));
 
 /** Report progress without ever printing a value. */

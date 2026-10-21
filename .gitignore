@@ -12,21 +12,13 @@
 /cache/
 /llm-*/
 
-# --- machine-local overlay: internal hostnames, per-host rows ---
-# The home-layer patch the loader applies after the profile layer. Tracked
-# config stays generic enough to publish; this file carries what only exists on
-# this network.
+# --- machine-local overlay: per-host rows ---
+# The home-layer patch the loader applies after the profile layer, for a row
+# that must exist on one machine and nowhere else. Nothing uses it right now.
 /cordis.patch.yml
-# Documents this lab's own GitLab runners. Useful here, meaningless (and
-# internal-hostname-bearing) anywhere else.
-/skills/lab-gitlab-ci/
 
 # --- decrypted secrets (the sops copies ARE tracked) ---
 /.credentials.yaml
-# A per-machine credential document: created on a machine that does not hold
-# the age identity the tracked document is encrypted to. Never published, so
-# this machine's keys cannot be committed by accident.
-/secrets.local.sops.yaml
 .env
 .env.*
 

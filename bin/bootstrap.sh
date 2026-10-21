@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # Restore this DSH home from the repo. Safe to re-run.
+#
+#   bin/bootstrap.sh [profile]     # default: web
+#
+# The profile only chooses which credential document to check; every plugin and
+# every profile is still built and linked.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 1. There is nothing to decrypt at boot: the credential document is read
-#    directly by dsh-sops-credentials, in memory. Decrypting it here only proves
-#    which identity can read it, so a machine that does not hold the age key is
-#    a warning, not a failure — the harness still boots and every credential
-#    simply stays unresolved. See README, "Using this repo somewhere else".
-#
-#    Which document: a gitignored local one shadows the tracked one, the same
-#    precedence the shared bundle's provider row and the sync script apply.
-document=secrets.sops.yaml
-if [ -f secrets.local.sops.yaml ]; then
-  document=secrets.local.sops.yaml
-fi
+profile=${1:-web}
+
+# 1. There is nothing to decrypt at boot: the profile's credential document is
+#    read directly by dsh-sops-credentials, in memory. Decrypting it here only
+#    proves which identity can read it, so a machine that does not hold the age
+#    key is a warning, not a failure — the harness still boots and every
+#    credential simply stays unresolved. See README, "Using this repo somewhere
+#    else".
+document="secrets.${profile}.sops.yaml"
 if [ ! -f "$document" ]; then
   echo "warning: $document is missing; every credential will be unresolved" >&2
 elif sops -d --output-type json "$document" > /dev/null 2>&1; then

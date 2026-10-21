@@ -1,25 +1,27 @@
 # Creation rules for the DSH harness credential documents.
 #
-# Two shapes exist:
-#   - secrets.sops.yaml        the tracked document, owned by the machine that
-#                              generated the age identity below (and published
-#                              as ciphertext).
-#   - secrets.local.sops.yaml   a per-machine document, gitignored, created on a
-#                              machine that does not hold the identity above.
+# There is one document per profile, and the profile names the file:
+#
+#   secrets.web.sops.yaml   used by `profiles/web`
+#   secrets.work.sops.yaml   used by `profiles/work`
+#
+# Both are ciphertext committed to the repo. Nothing selects between them at
+# runtime by guessing: each profile patch names its own file, so running
+# `dsh work` on the home machine still reads the work document.
 #
 # A file that already exists carries its own recipients in its `sops:` metadata,
-# so these rules only decide who a *new* file is encrypted to. On a machine
-# without the identity below, seed the local document with its own key instead
-# of relying on these rules — see README, "Using this repo somewhere else":
+# so these rules only decide who a *new* file is encrypted to. The key below is
+# this machine's; a document created somewhere else should be seeded with that
+# machine's key instead:
 #
 #   sops --encrypt --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" ...
 #
-# The rule is written to match both names so that `sops secrets.local.sops.yaml`
-# still opens the right recipients on this machine.
-# Add another age1… key below (comma-separated) and run:
-#   sops updatekeys secrets.sops.yaml
+# The rule matches both names so that `sops secrets.work.sops.yaml` applies the
+# right recipients here, and so re-keying with
+#   sops updatekeys secrets.web.sops.yaml
+# works without repeating the age1… key in each project.
 creation_rules:
-  - path_regex: secrets(\.local)?\.sops\.ya?ml$
+  - path_regex: secrets\.(web|work)\.sops\.ya?ml$
     key_groups:
       - age:
           - age14yat0hyq3w0ahkzetdw9t9q28x2pe3x4e27qs2kw9e968frdec3sx0ntr7

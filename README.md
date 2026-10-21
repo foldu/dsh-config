@@ -16,8 +16,8 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `plugins/dsh-extra-writable-roots/` | Bundle that replaces the sandbox provider and filesystem backend to add deployment-wide writable roots (`~/.cache`, `~/.cargo`, `/tmp`, and pnpm's store, state, `~/.npm` and runtime lock directories); see its README. |
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `plugins/dsh-coauthor-identity/` | Tells the model selected in the composer who it is and the `Co-authored-by:` trailer to append to git commits; see its README. |
-| `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from `secrets.sops.yaml`, decrypted in memory at startup; see its README. |
-| `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus this machine's encrypted credential document: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose — the age identity that reads it never leaves the machine it was generated on. A second, gitignored `secrets.local.sops.yaml` serves machines that do not hold that identity. |
+| `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from a SOPS document, decrypted in memory at startup; see its README. |
+| `.sops.yaml`, `secrets.<profile>.sops.yaml` | SOPS rules plus one encrypted credential document per profile — `secrets.web.sops.yaml` for `web`, `secrets.work.sops.yaml` for `work`: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose; each document is encrypted to the age identity of the machine that owns it. |
 | `bin/` | Bootstrap, secrets sync, plugin version sync (`update-plugins.mjs`), and the `sops-run.mjs` child-environment helper. |
 | `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
 
@@ -87,11 +87,12 @@ every local plugin's build output (`lib/`), which is not committed.
 On a machine that is not the one it was written for — a work laptop, a fresh
 box — three things differ, all of them by design:
 
-1. **The age identity is absent**, so `secrets.sops.yaml` cannot be decrypted
-   here. That is what makes it safe to publish: the ciphertext is public, the
-   key is not. Leave that file alone — it belongs to the machine that owns its
-   key, and editing it here would put *this* machine's keys into a tracked
-   file. Give this machine its own document instead, which is gitignored:
+1. **The age identity is absent**, so `secrets.web.sops.yaml` cannot be
+   decrypted here. That is what makes it safe to publish: the ciphertext is
+   public, the key is not. Leave that file alone — it belongs to the machine
+   that owns its key, and editing it here would put *this* machine's keys into a
+   tracked file. The `work` profile already expects a different document,
+   `secrets.work.sops.yaml`, created here with this machine's key:
 
    ```sh
    age-keygen -o ~/.config/sops/age/keys.txt   # a new identity
@@ -102,18 +103,15 @@ box — three things differ, all of them by design:
    printf 'OPENROUTER_API_KEY: ""\n' >/tmp/seed.yml
    sops --encrypt --input-type yaml \
      --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" \
-     /tmp/seed.yml > secrets.local.sops.yaml
-   sops secrets.local.sops.yaml
+     /tmp/seed.yml > secrets.work.sops.yaml
+   sops secrets.work.sops.yaml
    ```
 
-   Then nothing else needs configuring: `secrets.local.sops.yaml` shadows the
-   tracked document **by name**. The shared bundle's provider row, the
-   `sops-run.mjs` bridge behind the GitHub MCP row, `bin/bootstrap.sh` and
-   `bin/secrets-sync.sh` all apply that one precedence, so they cannot end up
-   reading different documents — which would mean the MCP child decrypting with
-   a key that is not there, and silently losing its token.
+   No config edit is needed either: the `work` profile's patch names that file,
+   and the GitHub bridge aliases the same path, so the provider and
+   `sops-run.mjs` cannot disagree about which key to use.
 
-   `bootstrap.sh` warns rather than fails when the effective document cannot be
+   `bin/bootstrap.sh work` warns rather than fails when the document cannot be
    read, so the rest of the restore still completes.
 
 2. **The home layer is absent**, so internal-host rows are absent too. Add
@@ -130,9 +128,9 @@ Everything else — profiles, plugins, skills, credential plumbing, the
 The tracked tree is meant to be publishable to a public remote. The invariants
 that keep it that way:
 
-- No plaintext credential has ever been committed. `secrets.sops.yaml` is
-  ciphertext; never commit the age identity, `.credentials.yaml`, or a decrypted
-  export. `.githooks/pre-commit` blocks the obvious cases.
+- No plaintext credential has ever been committed. `secrets.<profile>.sops.yaml`
+  is ciphertext; never commit the age identity, `.credentials.yaml`, or a
+  decrypted export. `.githooks/pre-commit` blocks the obvious cases.
 - Internal hostnames are fine to publish (the GitLab row names one); keys are
   not. The optional home layer stays gitignored anyway, for rows that must not
   exist on another machine at all.
@@ -177,8 +175,11 @@ automatic harness discovery fails, pass
 
 ## Secrets
 
-`secrets.sops.yaml` is the credential document for this machine. Open it with
-`sops secrets.sops.yaml` and keep two shapes in it:
+Each profile has its own credential document, named by the profile:
+`secrets.web.sops.yaml` for `web`, `secrets.work.sops.yaml` for `work`. The
+profile's patch inserts the provider row with that path, so which keys a session
+can see is a property of the profile you launched — not of a file that happens
+to exist. Open one with `sops secrets.web.sops.yaml` and keep two shapes in it:
 
 ```yaml
 GITHUB_TOKEN: ghp_…               # a top-level key is a credential reference
@@ -200,19 +201,18 @@ sign-in, a rotated grant) into a plaintext `.credentials.yaml`. Promote those
 into the document and delete the plaintext copy with:
 
 ```sh
-bin/secrets-sync.sh
+bin/secrets-sync.sh          # the web profile's document
+bin/secrets-sync.sh work     # a named profile's document
 ```
 
-The script merges the store into `secrets.sops.yaml` (encrypting in memory via
-`sops encrypt` on a pipe), then removes `.credentials.yaml`. Run it after any
-sign-in.
+The script merges the store into that profile's document (encrypting in memory
+via `sops encrypt` on a pipe), then removes `.credentials.yaml`. Run it after
+any sign-in, against the profile you were running.
 
-Exactly one document is mounted at a time. The rule is a name, not a config
-knob: a gitignored `secrets.local.sops.yaml` shadows the tracked
-`secrets.sops.yaml`, and `bin/bootstrap.sh` and `bin/secrets-sync.sh` apply the
-same precedence. The provider does not merge documents, which is deliberate: a
-reference has exactly one source, so it can never resolve to a value from a
-document you did not expect.
+Exactly one document is mounted per session, and the profile picks it. The
+provider does not merge documents, which is deliberate: a reference has exactly
+one source, so it can never resolve to a value from a document you did not
+expect.
 
 Child processes never inherit these values. A command that needs one gets it
 explicitly through `bin/sops-run.mjs` — that is how the GitHub MCP row passes

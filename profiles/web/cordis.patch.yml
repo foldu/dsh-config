@@ -2,13 +2,15 @@
 # YAML array of loader patch entries (id-targeted config overrides, disables,
 # and insert lists; `!!js` expressions allowed).
 #
-# The shared rows live in the `dsh-config-core` bundle (search provider,
-# credentials document, GitHub MCP server, sandbox roots, co-author table,
-# theme), so the `work` profile gets them without copying anything.
+# The shared rows live in the `dsh-config-core` bundle (search provider, sandbox
+# roots, co-author table, theme, and the disable of the plaintext credential
+# store). This profile names everything that is its own:
 #
-# What is deliberately only here: the model list, and the two tools that belong
-# to the home context rather than to work — REA and GitLab, both below. Being in
-# this file is what scopes them: `work` has its own patch and never sees these.
+#   - the model list
+#   - its credential document, `secrets.web.sops.yaml`
+#   - the two home-context tools, REA and GitLab
+#
+# `work` has its own patch with its own document and none of those tools.
 #
 # This file is also written by the harness: settings changes append entries here
 # (the `ui-settings-general` row at the bottom landed that way). Expect it to
@@ -35,6 +37,53 @@
           - id: z-ai/glm-5.3
           - id: moonshotai/kimi-k3
 
+# This profile's credential document. The path is written once and aliased by
+# the GitHub bridge below, so the provider and the child that decrypts the same
+# file cannot disagree about which key is in play.
+- insert:
+    - id: credentials-sops
+      name: "dsh-sops-credentials"
+      config:
+        sopsFile: &credentialDocument !!js dshHomePath('secrets.web.sops.yaml')
+        ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
+
+# GitHub's official MCP server through a stdio bridge. bin/sops-run.mjs decrypts
+# this profile's document (the anchor above) into mcp-remote's environment only,
+# and mcp-remote expands ${GITHUB_TOKEN} into the header it sends; the token
+# never enters the harness process, this file, or any plaintext file.
+# dsh-mcp-client maps the server's tools to mcp__github__<tool>.
+- insert:
+    - id: mcp-github
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: github
+        transport: stdio
+        command: node
+        args:
+          - !!js dshHomePath('bin', 'sops-run.mjs')
+          # The same document the provider mounts — an alias, never a second
+          # copy of the path.
+          - *credentialDocument
+          # Only GITHUB_TOKEN reaches the child; the rest of the document
+          # stays in the harness process.
+          - "--only"
+          - "GITHUB_TOKEN"
+          - npx
+          - "-y"
+          - mcp-remote
+          - "https://api.githubcopilot.com/mcp/"
+          - "--header"
+          - "Authorization: Bearer ${GITHUB_TOKEN}"
+          # Read-only toolset; drop this header for write access.
+          - "--header"
+          - "X-MCP-Readonly: true"
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # Deliberately NOT failOnStartupError: an MCP server that cannot reach
+        # the network must leave the harness up and tool-less, not crash-loop
+        # the whole GUI. The client retries in the background.
+
 # REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
 # native binaries, JavaScript/Electron apps, .NET assemblies and websites.
 # Static analysis needs nothing extra; decompilation drives an already-installed
@@ -43,8 +92,7 @@
 # deliberately. First launch downloads the package into ~/.cache/npm, a declared
 # writable root.
 #
-# Home profile only: `work` does not get this row, because it is not part of the
-# shared bundle.
+# Home profile only: the row lives in this file, so `work` never mounts it.
 - insert:
     - id: mcp-rea
       name: "@deepseek-ai/dsh-mcp-client"
