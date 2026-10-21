@@ -23,6 +23,10 @@
 
 # --- decrypted secrets (the sops copies ARE tracked) ---
 /.credentials.yaml
+# A per-machine credential document: created on a machine that does not hold
+# the age identity the tracked document is encrypted to. Never published, so
+# this machine's keys cannot be committed by accident.
+/secrets.local.sops.yaml
 .env
 .env.*
 

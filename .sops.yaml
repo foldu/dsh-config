@@ -1,9 +1,25 @@
-# Creation rules for the DSH harness secrets file.
-# The age identity is the existing one at ~/.config/sops/age/keys.txt.
-# Add a second age1… key below (comma-separated) and run:
+# Creation rules for the DSH harness credential documents.
+#
+# Two shapes exist:
+#   - secrets.sops.yaml        the tracked document, owned by the machine that
+#                              generated the age identity below (and published
+#                              as ciphertext).
+#   - secrets.local.sops.yaml   a per-machine document, gitignored, created on a
+#                              machine that does not hold the identity above.
+#
+# A file that already exists carries its own recipients in its `sops:` metadata,
+# so these rules only decide who a *new* file is encrypted to. On a machine
+# without the identity below, seed the local document with its own key instead
+# of relying on these rules — see README, "Using this repo somewhere else":
+#
+#   sops --encrypt --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" ...
+#
+# The rule is written to match both names so that `sops secrets.local.sops.yaml`
+# still opens the right recipients on this machine.
+# Add another age1… key below (comma-separated) and run:
 #   sops updatekeys secrets.sops.yaml
 creation_rules:
-  - path_regex: secrets\.sops\.ya?ml$
+  - path_regex: secrets(\.local)?\.sops\.ya?ml$
     key_groups:
       - age:
           - age14yat0hyq3w0ahkzetdw9t9q28x2pe3x4e27qs2kw9e968frdec3sx0ntr7

@@ -16,7 +16,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `plugins/dsh-coauthor-identity/` | Tells the model selected in the composer who it is and the `Co-authored-by:` trailer to append to git commits; see its README. |
 | `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from `secrets.sops.yaml`, decrypted in memory at startup; see its README. |
-| `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus the **single** encrypted credential document: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose — the age identity that reads it never leaves the machine it was generated on. |
+| `.sops.yaml`, `secrets.sops.yaml` | SOPS rules plus this machine's encrypted credential document: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose — the age identity that reads it never leaves the machine it was generated on. A second, gitignored `secrets.local.sops.yaml` serves machines that do not hold that identity. |
 | `bin/` | Bootstrap, secrets sync, plugin version sync (`update-plugins.mjs`), and the `sops-run.mjs` child-environment helper. |
 | `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
 
@@ -77,19 +77,38 @@ box — three things differ, all of them by design:
 
 1. **The age identity is absent**, so `secrets.sops.yaml` cannot be decrypted
    here. That is what makes it safe to publish: the ciphertext is public, the
-   key is not. Create a document for this machine instead. Either add your
-   public key and re-key where the old key is available
-   (`sops updatekeys secrets.sops.yaml`), or start a fresh document holding only
-   what this machine needs:
+   key is not. Leave that file alone — it belongs to the machine that owns its
+   key, and editing it here would put *this* machine's keys into a tracked
+   file. Give this machine its own document instead, which is gitignored:
 
    ```sh
    age-keygen -o ~/.config/sops/age/keys.txt   # a new identity
-   # put its age1… public key in .sops.yaml, then:
-   sops secrets.sops.yaml                      # create/edit; encrypts on save
+   age-keygen -y ~/.config/sops/age/keys.txt   # its public key
+
+   # seed an empty document encrypted to this machine's key, then edit it;
+   # later edits reuse the recipients already recorded in the file
+   printf 'OPENROUTER_API_KEY: ""\n' >/tmp/seed.yml
+   sops --encrypt --input-type yaml \
+     --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" \
+     /tmp/seed.yml > secrets.local.sops.yaml
+   sops secrets.local.sops.yaml
    ```
 
-   `bootstrap.sh` warns rather than fails when the document cannot be read, so
-   the rest of the restore still completes.
+   Then point the provider at it in the home layer. A patch replaces the whole
+   config of the row it targets, so restate `ageKeyFile`:
+
+   ```yaml
+   # $DSH_HOME/cordis.patch.yml
+   - id: credentials-sops
+     config:
+       sopsFile: !!js dshHomePath('secrets.local.sops.yaml')
+       ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
+   ```
+
+   `bin/secrets-sync.sh` takes the same path: `node
+   plugins/dsh-sops-credentials/scripts/sync.mjs --sops
+   secrets.local.sops.yaml`. `bootstrap.sh` warns rather than fails when the
+   tracked document cannot be read, so the rest of the restore still completes.
 
 2. **The home layer is absent**, so internal-host rows are absent too. Add
    whatever this machine needs in `$DSH_HOME/cordis.patch.yml`.
@@ -151,7 +170,7 @@ automatic harness discovery fails, pass
 
 ## Secrets
 
-`secrets.sops.yaml` is the only credential document. Open it with
+`secrets.sops.yaml` is the credential document for this machine. Open it with
 `sops secrets.sops.yaml` and keep two shapes in it:
 
 ```yaml
@@ -180,6 +199,13 @@ bin/secrets-sync.sh
 The script merges the store into `secrets.sops.yaml` (encrypting in memory via
 `sops encrypt` on a pipe), then removes `.credentials.yaml`. Run it after any
 sign-in.
+
+Exactly one document is mounted at a time, chosen by the row's `sopsFile`. This
+machine uses the tracked one. A machine that does not hold its age identity
+uses its own gitignored `secrets.local.sops.yaml` instead, selected in the home
+layer — see "Using this repo somewhere else". The provider does not merge
+documents, which is deliberate: a reference has exactly one source, so it can
+never resolve to a value from a document you did not expect.
 
 Child processes never inherit these values. A command that needs one gets it
 explicitly through `bin/sops-run.mjs` — that is how the GitHub MCP row passes
