@@ -140,9 +140,11 @@ that keep it that way:
 
 ```sh
 git config core.hooksPath .githooks      # once per clone
-git remote add public git@github.com:<you>/dsh-config.git
-git push public master
+git push public master                   # public -> git@github.com:foldu/dsh-config.git
 ```
+
+`origin` is the internal GitLab (`gitlab@lab.home.5kw.li:foldu/dsh-config.git`);
+`public` is the GitHub remote the repo is published to.
 
 ## Updating after a harness upgrade
 
