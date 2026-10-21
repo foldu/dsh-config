@@ -16,8 +16,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import YAML from 'yaml';
 
 /**
@@ -128,14 +128,18 @@ if (Object.keys(records).length > 0) {
 if (changed === 0) {
 	note('the document already holds every entry the store has');
 } else {
-	const directory = await mkdtemp(join(tmpdir(), 'dsh-secrets-sync-'));
+	// Stage beside the destination, not in the system temp dir: the install is
+	// a rename, and a rename cannot cross filesystems (EXDEV — /tmp is tmpfs on
+	// many systems). A sibling directory also keeps the write on the same mount
+	// as the document it replaces.
+	const directory = await mkdtemp(join(dirname(sopsFile), '.secrets-sync-'));
 	try {
 		const encrypted = execFileSync(
 			'sops',
 			['encrypt', '--input-type', 'json', '--output-type', 'yaml', '--filename-override', sopsFile],
 			{ input: JSON.stringify(document), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
 		);
-		const staged = join(directory, 'secrets.sops.yaml');
+		const staged = join(directory, basename(sopsFile));
 		await writeFile(staged, encrypted, { mode: 0o600 });
 		await rename(staged, sopsFile);
 	} finally {
