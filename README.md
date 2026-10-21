@@ -7,8 +7,9 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 
 | Path | What it is |
 | --- | --- |
-| `profiles/<name>/cordis.patch.yml` | The profile's own patch layer — the file to edit. |
+| `profiles/<name>/cordis.patch.yml` | The profile's own patch layer — the file to edit. `web` is the home profile; `work` is the same bundle set with a different model list. |
 | `profiles/<name>/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml,cordis.yml}` | Profile manifest and its plugin dependencies. |
+| `bundles/dsh-config-core/` | The rows every profile shares — search provider, credential document, GitHub and REA MCP servers, sandbox roots, co-author table, theme. A pure patch bundle: bundle layers apply before a profile's own patch, so a profile overrides its rows by id. |
 | `skills/<name>/SKILL.md` | User-global agent skills, scanned at `$DSH_HOME/skills` (rank 400, ahead of `~/.agents/skills`). |
 | `plugins/dsh-web-search-kagi/` | Kagi Search API v1 provider for `ctx.web` (TypeScript; see its README). |
 | `plugins/dsh-bash-shfmt/` | Web GUI decoration that shows bash commands reformatted with `shfmt` in the approval prompt and the bash tool row; see its README. |
@@ -94,21 +95,15 @@ box — three things differ, all of them by design:
    sops secrets.local.sops.yaml
    ```
 
-   Then point the provider at it in the home layer. A patch replaces the whole
-   config of the row it targets, so restate `ageKeyFile`:
+   Then nothing else needs configuring: `secrets.local.sops.yaml` shadows the
+   tracked document **by name**. The shared bundle's provider row, the
+   `sops-run.mjs` bridge behind the GitHub MCP row, `bin/bootstrap.sh` and
+   `bin/secrets-sync.sh` all apply that one precedence, so they cannot end up
+   reading different documents — which would mean the MCP child decrypting with
+   a key that is not there, and silently losing its token.
 
-   ```yaml
-   # $DSH_HOME/cordis.patch.yml
-   - id: credentials-sops
-     config:
-       sopsFile: !!js dshHomePath('secrets.local.sops.yaml')
-       ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
-   ```
-
-   `bin/secrets-sync.sh` takes the same path: `node
-   plugins/dsh-sops-credentials/scripts/sync.mjs --sops
-   secrets.local.sops.yaml`. `bootstrap.sh` warns rather than fails when the
-   tracked document cannot be read, so the rest of the restore still completes.
+   `bootstrap.sh` warns rather than fails when the effective document cannot be
+   read, so the rest of the restore still completes.
 
 2. **The home layer is absent**, so internal-host rows are absent too. Add
    whatever this machine needs in `$DSH_HOME/cordis.patch.yml`.
@@ -200,12 +195,12 @@ The script merges the store into `secrets.sops.yaml` (encrypting in memory via
 `sops encrypt` on a pipe), then removes `.credentials.yaml`. Run it after any
 sign-in.
 
-Exactly one document is mounted at a time, chosen by the row's `sopsFile`. This
-machine uses the tracked one. A machine that does not hold its age identity
-uses its own gitignored `secrets.local.sops.yaml` instead, selected in the home
-layer — see "Using this repo somewhere else". The provider does not merge
-documents, which is deliberate: a reference has exactly one source, so it can
-never resolve to a value from a document you did not expect.
+Exactly one document is mounted at a time. The rule is a name, not a config
+knob: a gitignored `secrets.local.sops.yaml` shadows the tracked
+`secrets.sops.yaml`, and `bin/bootstrap.sh` and `bin/secrets-sync.sh` apply the
+same precedence. The provider does not merge documents, which is deliberate: a
+reference has exactly one source, so it can never resolve to a value from a
+document you did not expect.
 
 Child processes never inherit these values. A command that needs one gets it
 explicitly through `bin/sops-run.mjs` — that is how the GitHub MCP row passes

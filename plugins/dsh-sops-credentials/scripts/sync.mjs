@@ -13,6 +13,7 @@
  *   node scripts/sync.mjs [--sops <file>] [--store <file>] [--keep-store]
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -41,8 +42,20 @@ function parseArgs(argv) {
 
 /** Absolute path of this machine's harness home. */
 const dshHome = resolve(process.env.DSH_HOME ?? join(homedir(), '.dsh'));
+/**
+ * The credential document this machine actually mounts: a gitignored local
+ * document shadows the tracked one. This is the same precedence the shared
+ * bundle's provider row and bin/bootstrap.sh apply, and it matters here —
+ * syncing a machine's store into the tracked document would write its secrets
+ * into a tracked file.
+ * @returns {string} absolute path to the document to merge into.
+ */
+function defaultDocument() {
+	const local = join(dshHome, 'secrets.local.sops.yaml');
+	return existsSync(local) ? local : join(dshHome, 'secrets.sops.yaml');
+}
 const options = parseArgs(process.argv.slice(2));
-const sopsFile = resolve(options.sops ?? join(dshHome, 'secrets.sops.yaml'));
+const sopsFile = resolve(options.sops ?? defaultDocument());
 const storeFile = resolve(options.store ?? join(dshHome, '.credentials.yaml'));
 
 /** Report progress without ever printing a value. */

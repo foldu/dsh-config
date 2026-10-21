@@ -3,17 +3,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 1. There is nothing to decrypt at boot: secrets.sops.yaml is read directly by
-#    dsh-sops-credentials, in memory. Decrypting it here only proves which
-#    identity can read it, so a machine that does not hold the age key is a
-#    warning, not a failure — the harness still boots and every credential
+# 1. There is nothing to decrypt at boot: the credential document is read
+#    directly by dsh-sops-credentials, in memory. Decrypting it here only proves
+#    which identity can read it, so a machine that does not hold the age key is
+#    a warning, not a failure — the harness still boots and every credential
 #    simply stays unresolved. See README, "Using this repo somewhere else".
-if [ ! -f secrets.sops.yaml ]; then
-  echo "warning: secrets.sops.yaml is missing; every credential will be unresolved" >&2
-elif sops -d --output-type json secrets.sops.yaml > /dev/null 2>&1; then
-  echo "ok: secrets.sops.yaml decrypts with the local age identity"
+#
+#    Which document: a gitignored local one shadows the tracked one, the same
+#    precedence the shared bundle's provider row and the sync script apply.
+document=secrets.sops.yaml
+if [ -f secrets.local.sops.yaml ]; then
+  document=secrets.local.sops.yaml
+fi
+if [ ! -f "$document" ]; then
+  echo "warning: $document is missing; every credential will be unresolved" >&2
+elif sops -d --output-type json "$document" > /dev/null 2>&1; then
+  echo "ok: $document decrypts with the local age identity"
 else
-  echo "warning: cannot decrypt secrets.sops.yaml with the local age identity" >&2
+  echo "warning: cannot decrypt $document with the local age identity" >&2
   echo "         expected on a machine that does not hold the key;" >&2
   echo "         create a credential document for this machine (README)" >&2
 fi
@@ -31,13 +38,20 @@ for profile in profiles/*/; do
   ( cd "$profile" && pnpm install )
 done
 
-# 4. Verify the composition sees the plugins.
-dump=$(dsh --profile web --dump-config)
-for plugin in web-search-kagi bash-shfmt extra-writable-roots claude-copilot-brand coauthor-identity sops-credentials; do
-  case "$dump" in
-    *"$plugin"*) echo "ok: web profile composes $plugin" ;;
-    *) echo "FAIL: web profile does not compose $plugin" >&2; exit 1 ;;
-  esac
+# 4. Verify every profile that uses the shared bundle composes it, plus its own
+#    rows. Profiles without the bundle (headless) are not expected to.
+for profile in profiles/*/; do
+  [ -f "${profile}package.json" ] || continue
+  grep -q 'dsh-config-core' "${profile}package.json" || continue
+  name=$(basename "$profile")
+  dump=$(dsh --profile "$name" --dump-config)
+  for plugin in web-search-kagi bash-shfmt extra-writable-roots claude-copilot-brand coauthor-identity sops-credentials; do
+    case "$dump" in
+      *"$plugin"*) : ;;
+      *) echo "FAIL: $name profile does not compose $plugin" >&2; exit 1 ;;
+    esac
+  done
+  echo "ok: $name profile composes the shared rows"
 done
 
 echo "restart the harness to mount anything newly linked"
