@@ -29,32 +29,43 @@ machine, so repo-scoped agent rules live in `plugins/AGENTS.md` instead.
 
 `sessions/`, `storages/`, `logs/`, `attachments/`, `cache/`, `llm-deepseek/` and
 `.anonymous-user-id` (private runtime state), `.credentials.yaml` (a plaintext
-store this setup normally deletes), every `node_modules/`, and two things that
-exist only for this deployment: the home-layer overlay `cordis.patch.yml`
-(described below) and `skills/lab-gitlab-ci/`, which documents one internal
-GitLab and stays on disk but is never published.
+store this setup normally deletes), every `node_modules/`, the optional home
+overlay `cordis.patch.yml` (see below), and `skills/lab-gitlab-ci/`, which
+documents one specific GitLab and currently stays local.
 
 ## Machine-local overlay
 
 The loader applies layers in this order: each bundle, then the profile's
 `cordis.patch.yml`, then `$DSH_HOME/cordis.patch.yml` (the home layer), then any
-`--patch` CLI overlay. The home layer is untracked, which makes it the place for
-rows that only make sense on this machine — above all anything naming a host
-that is not reachable from outside this network.
+`--patch` CLI overlay. The home layer is untracked and gitignored: it is the
+escape hatch for a row that must exist on one machine and nowhere else, and it
+applies to *every* profile on that machine.
 
-The GitLab MCP row lives there now, not in `profiles/web/`. Add a row the same
-way you would in the profile patch:
+Nothing uses it at the moment — the GitLab row it used to hold now lives in
+`profiles/web/` — so the file is absent. A clone without it composes fine, and
+nothing in the tracked config depends on it. If you do add one, remember it
+outranks every profile, so gate anything profile-specific:
 
 ```yaml
 # $DSH_HOME/cordis.patch.yml — untracked
 - insert:
-    - id: mcp-gitlab
-      name: "@deepseek-ai/dsh-mcp-client"
+    - id: some-row
+      name: "@deepseek-ai/dsh-some-plugin"
+      disabled: !!js "ctx.get('profileContext')?.name !== 'web'"
       config: { … }
 ```
 
-A clone without the file composes fine: the row is simply absent, and nothing in
-the tracked config depends on it.
+## Home-context tools
+
+Two rows are deliberately narrower than the shared bundle:
+
+| Row | Where | Reaches |
+| --- | --- | --- |
+| REA (`mcp-rea`) | `profiles/web/cordis.patch.yml` | home profile only |
+| GitLab (`mcp-gitlab`) | `profiles/web/cordis.patch.yml` | home profile only |
+
+Both are ordinary tracked rows in the home profile, so `dsh work` gets the
+GitHub MCP and the shipped tools, no reverse-engineering and no lab GitLab.
 
 ## Restore on a fresh machine
 
@@ -122,8 +133,9 @@ that keep it that way:
 - No plaintext credential has ever been committed. `secrets.sops.yaml` is
   ciphertext; never commit the age identity, `.credentials.yaml`, or a decrypted
   export. `.githooks/pre-commit` blocks the obvious cases.
-- No tracked file names an internal host. That is why the home layer and the
-  internal-only skill are gitignored.
+- Internal hostnames are fine to publish (the GitLab row names one); keys are
+  not. The optional home layer stays gitignored anyway, for rows that must not
+  exist on another machine at all.
 - `bin/bootstrap.sh` passes from a clean clone.
 
 ```sh

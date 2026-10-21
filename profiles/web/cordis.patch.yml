@@ -2,16 +2,17 @@
 # YAML array of loader patch entries (id-targeted config overrides, disables,
 # and insert lists; `!!js` expressions allowed).
 #
-# Almost nothing is here on purpose. The shared rows live in the
-# `dsh-config-core` bundle (search provider, credentials document, GitHub and
-# REA MCP servers, sandbox roots, co-author table, theme), so the `work` profile
-# gets them without copying anything. What remains is the one thing this profile
-# exists to decide: the model list.
+# The shared rows live in the `dsh-config-core` bundle (search provider,
+# credentials document, GitHub MCP server, sandbox roots, co-author table,
+# theme), so the `work` profile gets them without copying anything.
 #
-# The GitLab MCP row is neither here nor in the shared bundle: its endpoint is a
-# host on the home network, so it lives in the untracked home layer
-# (`$DSH_HOME/cordis.patch.yml`), which applies to every profile on this
-# machine. See README, "Machine-local overlay".
+# What is deliberately only here: the model list, and the two tools that belong
+# to the home context rather than to work — REA and GitLab, both below. Being in
+# this file is what scopes them: `work` has its own patch and never sees these.
+#
+# This file is also written by the harness: settings changes append entries here
+# (the `ui-settings-general` row at the bottom landed that way). Expect it to
+# change underneath you, and keep hand edits additive.
 
 # OpenRouter through the pi-ai adapter (already mounted as `llm-pi-ai`, dormant
 # without routes). The catalog carries ~390 models across two protocols; `models`
@@ -33,6 +34,104 @@
           - id: z-ai/glm-5.3-flash
           - id: z-ai/glm-5.3
           - id: moonshotai/kimi-k3
+
+# REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
+# native binaries, JavaScript/Electron apps, .NET assemblies and websites.
+# Static analysis needs nothing extra; decompilation drives an already-installed
+# Hopper, Ghidra, or IDA, and the Android/firmware paths use their own tools.
+# Pinned to 6.5.0 so a boot cannot silently swap the tool catalogue — bump it
+# deliberately. First launch downloads the package into ~/.cache/npm, a declared
+# writable root.
+#
+# Home profile only: `work` does not get this row, because it is not part of the
+# shared bundle.
+- insert:
+    - id: mcp-rea
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: rea
+        transport: stdio
+        command: npx
+        args:
+          - "-y"
+          - "rea-agents@6.5.0"
+          - "mcp"
+        # Ghidra and its JDK come from the Nix install. bin/ghidra-home.mjs
+        # resolves both store paths at mount, because the profile's `ghidra`
+        # launcher is an extension layer whose real install is a sibling store
+        # path. A missing Ghidra yields no variables (REA reports it
+        # unconfigured) rather than failing the row.
+        env: !!js >-
+          Object.fromEntries([
+            ["npm_config_cache", dshHomePath('..', '.cache', 'npm')],
+            ...process.getBuiltinModule('node:child_process')
+              .execFileSync(process.execPath, [dshHomePath('bin', 'ghidra-home.mjs')], { encoding: "utf8" })
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => line.split("=")),
+          ])
+        # Analyses run for minutes (decompilation, tracing), so the default
+        # 60s tool-call bound would abort them mid-flight.
+        toolCallTimeoutMs: 600000
+        # Non-fatal like the other rows: a failed first download or a missing
+        # decompiler costs the REA tools, never the GUI.
+        reconnect:
+          enabled: true
+          maxAttempts: 5
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+
+# GitLab MCP server (the GitLab instance on the home lab). Home profile only by
+# placement: the row lives in this profile's patch, so `work` never sees it.
+#
+# This endpoint is OAuth-only — a personal access token is refused (403 for both
+# `Authorization: Bearer` and `PRIVATE-TOKEN`, and the `mcp` scope cannot be put
+# on a PAT), so mcp-remote bridges stdio to the remote HTTP endpoint and runs the
+# OAuth authorization-code + PKCE flow itself.
+#
+# The failure this row used to cause: with no cached token, every connection
+# starts a new flow, prints an authorize URL, and gives up — and with
+# failOnStartupError it took the whole harness down. It is now non-fatal and
+# mcp-client retries, so a dead token costs the GitLab tools, not the GUI.
+#
+# Approve once, in a terminal with a browser (this writes the token into the
+# same cache directory the row reads; the callback port is derived from the
+# server URL, so do not run it while the harness is connected to this server):
+#
+#   MCP_REMOTE_CONFIG_DIR=~/.cache/mcp-auth npx -y mcp-remote \
+#     https://lab.home.5kw.li/api/v4/mcp
+#
+# Then restart the harness. If the refresh token later dies, re-run that command
+# and restart again.
+- insert:
+    - id: mcp-gitlab
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: gitlab
+        transport: stdio
+        command: npx
+        args:
+          - "-y"
+          - "mcp-remote"
+          - "https://lab.home.5kw.li/api/v4/mcp"
+        # Both caches under ~/.cache, a declared writable root, so the npx and
+        # OAuth token caches are writable by the harness process and by a
+        # confined `npx mcp-remote` alike.
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # Non-fatal on purpose: a failed OAuth handshake must not take the
+        # harness down with it. Ten attempts, 30s ceiling, then quiet until the
+        # next mount — enough to ride out a restart or a network blip, not
+        # enough to spam authorize URLs forever.
+        reconnect:
+          enabled: true
+          maxAttempts: 10
+          initialDelayMs: 2000
+          maxDelayMs: 30000
+
+# Written by the harness when the welcome notice version is bumped; kept so the
+# file round-trips cleanly.
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
   config:

@@ -141,48 +141,9 @@
     applyInReadOnly: false
     createMissingRoots: true
 
-# REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
-# native binaries, JavaScript/Electron apps, .NET assemblies and websites.
-# Static analysis needs nothing extra; decompilation drives an already-installed
-# Hopper, Ghidra, or IDA, and the Android/firmware paths use their own tools.
-# Pinned to 6.5.0 so a boot cannot silently swap the tool catalogue — bump it
-# deliberately. First launch downloads the package into ~/.cache/npm, a declared
-# writable root.
-- insert:
-    - id: mcp-rea
-      name: "@deepseek-ai/dsh-mcp-client"
-      config:
-        serverName: rea
-        transport: stdio
-        command: npx
-        args:
-          - "-y"
-          - "rea-agents@6.5.0"
-          - "mcp"
-        # Ghidra and its JDK come from the Nix install. bin/ghidra-home.mjs
-        # resolves both store paths at mount, because the profile's `ghidra`
-        # launcher is an extension layer whose real install is a sibling store
-        # path. A missing Ghidra yields no variables (REA reports it
-        # unconfigured) rather than failing the row.
-        env: !!js >-
-          Object.fromEntries([
-            ["npm_config_cache", dshHomePath('..', '.cache', 'npm')],
-            ...process.getBuiltinModule('node:child_process')
-              .execFileSync(process.execPath, [dshHomePath('bin', 'ghidra-home.mjs')], { encoding: "utf8" })
-              .split("\n")
-              .filter(Boolean)
-              .map((line) => line.split("=")),
-          ])
-        # Analyses run for minutes (decompilation, tracing), so the default
-        # 60s tool-call bound would abort them mid-flight.
-        toolCallTimeoutMs: 600000
-        # Non-fatal like the other rows: a failed first download or a missing
-        # decompiler costs the REA tools, never the GUI.
-        reconnect:
-          enabled: true
-          maxAttempts: 5
-          initialDelayMs: 1000
-          maxDelayMs: 30000
+# REA is deliberately NOT shared: it is a reverse-engineering tool that belongs
+# to the home profile, the way the GitLab row does. It lives in
+# `profiles/web/cordis.patch.yml`.
 
 # Co-author identity (dsh-coauthor-identity, plugins/). The composer's model
 # picker is the source of truth: the plugin reads the Agent's live
