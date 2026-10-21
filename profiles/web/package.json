@@ -8,7 +8,8 @@
     "dsh-expand-all": "link:../../plugins/dsh-expand-all",
     "dsh-extra-writable-roots": "link:../../plugins/dsh-extra-writable-roots",
     "dsh-sops-credentials": "link:../../plugins/dsh-sops-credentials",
-    "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi"
+    "dsh-web-search-kagi": "link:../../plugins/dsh-web-search-kagi",
+    "dsh-config-core": "link:../../bundles/dsh-config-core"
   },
   "dsh": {
     "profile": {
@@ -20,7 +21,8 @@
         "dsh-extra-writable-roots",
         "dsh-claude-copilot-brand",
         "dsh-coauthor-identity",
-        "dsh-expand-all"
+        "dsh-expand-all",
+        "dsh-config-core"
       ]
     }
   }

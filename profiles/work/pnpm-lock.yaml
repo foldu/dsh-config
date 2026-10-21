@@ -1,0 +1,34 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      dsh-bash-shfmt:
+        specifier: link:../../plugins/dsh-bash-shfmt
+        version: link:../../plugins/dsh-bash-shfmt
+      dsh-claude-copilot-brand:
+        specifier: link:../../plugins/dsh-claude-copilot-brand
+        version: link:../../plugins/dsh-claude-copilot-brand
+      dsh-coauthor-identity:
+        specifier: link:../../plugins/dsh-coauthor-identity
+        version: link:../../plugins/dsh-coauthor-identity
+      dsh-config-core:
+        specifier: link:../../bundles/dsh-config-core
+        version: link:../../bundles/dsh-config-core
+      dsh-expand-all:
+        specifier: link:../../plugins/dsh-expand-all
+        version: link:../../plugins/dsh-expand-all
+      dsh-extra-writable-roots:
+        specifier: link:../../plugins/dsh-extra-writable-roots
+        version: link:../../plugins/dsh-extra-writable-roots
+      dsh-sops-credentials:
+        specifier: link:../../plugins/dsh-sops-credentials
+        version: link:../../plugins/dsh-sops-credentials
+      dsh-web-search-kagi:
+        specifier: link:../../plugins/dsh-web-search-kagi
+        version: link:../../plugins/dsh-web-search-kagi

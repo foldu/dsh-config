@@ -1,0 +1,228 @@
+# The rows every profile here shares. This is a bundle layer: it is applied
+# before the profile's own `cordis.patch.yml`, so a profile overrides any row
+# below by id (a patch replaces the row's whole config, never a deep merge).
+#
+# What is deliberately not here: the model list (`llm-pi-ai`). That is the one
+# thing a profile exists to change, and `models` replaces the catalog wholesale.
+#
+# HMR is not watching anything right now (the `hmr` row keeps its shipped
+# default, an empty `root`), which is why the sandbox's writable roots live here
+# rather than in a profile patch. If HMR is turned back on — `root:
+# ["../../plugins"]` in a profile patch — remember that it watches the *profile*
+# patch only: an edit to a bundle layer changes what a fresh composition reads,
+# not what the running process uses. Move `extra-writable-roots` back into the
+# profile patch if you want to tune it live.
+#
+# Deployment-specific rows — anything naming a host only reachable from one
+# network — belong in the untracked home layer, not here. See README.
+
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1
+
+# Kagi search provider (dsh-web-search-kagi), installed from the local
+# checkout at plugins/dsh-web-search-kagi (repo-local).
+- insert:
+    - id: web-search-kagi
+      name: "dsh-web-search-kagi"
+
+# Pin the web seam's search to Kagi. A patch replaces the row's whole config,
+# so fetchProvider is restated to keep web_fetch on the shipped HTTP backend.
+- id: web
+  config:
+    searchProvider: kagi
+    fetchProvider: http
+
+# Stop mounting the shipped DeepSeek provider so the two never compete.
+- id: web-search-deepseek
+  disabled: true
+
+# Credential references and records from SOPS (dsh-sops-credentials, plugins/).
+#
+# One credential document is mounted, references at the top level and durable
+# records under `records:`. Which file that is follows one rule: a gitignored
+# `secrets.local.sops.yaml` shadows the tracked `secrets.sops.yaml`. A clone
+# that does not hold the tracked document's age identity drops in a local one
+# instead of editing a tracked file — see README, "Using this repo somewhere
+# else". bin/bootstrap.sh and the sync script apply the same precedence.
+#
+# It is decrypted into memory once at startup and re-decrypted when the file
+# changes, so no plaintext copy exists — no .env, no .credentials.yaml. A `set`
+# on a SOPS-backed reference is refused rather than silently shadowed; edit the
+# document instead (sops secrets.sops.yaml).
+#
+# The plaintext store underneath is still mounted because the harness writes
+# records at runtime (a sign-in) that the read-only document cannot accept;
+# promote those with bin/secrets-sync.sh, which also deletes the plaintext file.
+- id: credentials
+  disabled: true
+- insert:
+    - id: credentials-sops
+      name: "dsh-sops-credentials"
+      config:
+        # Which document: a gitignored machine-local one shadows the tracked
+        # one. Defined once and aliased by the sops-run child below, so the
+        # provider and the MCP bridge cannot disagree about which key is in
+        # play — at a clone without the tracked file's age identity, both must
+        # switch, or the child decrypts with a key that is not there.
+        # bin/bootstrap.sh and the sync script apply the same precedence.
+        sopsFile: &credentialDocument !!js >-
+          process.getBuiltinModule('node:fs').existsSync(dshHomePath('secrets.local.sops.yaml'))
+          ? dshHomePath('secrets.local.sops.yaml')
+          : dshHomePath('secrets.sops.yaml')
+        ageKeyFile: !!js dshHomePath('..', '.config', 'sops', 'age', 'keys.txt')
+
+# GitHub's official MCP server through a stdio bridge. bin/sops-run.mjs decrypts
+# the credential document (the same file the provider mounts, via the anchor
+# above) into mcp-remote's environment only, and mcp-remote expands
+# ${GITHUB_TOKEN} into the header it sends; the token never enters the harness
+# process, this file, or any plaintext file. dsh-mcp-client maps the server's
+# tools to mcp__github__<tool>.
+- insert:
+    - id: mcp-github
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: github
+        transport: stdio
+        command: node
+        args:
+          - !!js dshHomePath('bin', 'sops-run.mjs')
+          # The same document the provider mounts — an alias of the anchor
+          # above, never a second copy of the path.
+          - *credentialDocument
+          # Only GITHUB_TOKEN reaches the child; the rest of the document
+          # stays in the harness process.
+          - "--only"
+          - "GITHUB_TOKEN"
+          - npx
+          - "-y"
+          - mcp-remote
+          - "https://api.githubcopilot.com/mcp/"
+          - "--header"
+          - "Authorization: Bearer ${GITHUB_TOKEN}"
+          # Read-only toolset; drop this header for write access.
+          - "--header"
+          - "X-MCP-Readonly: true"
+        env:
+          npm_config_cache: !!js dshHomePath('..', '.cache', 'npm')
+          MCP_REMOTE_CONFIG_DIR: !!js dshHomePath('..', '.cache', 'mcp-auth')
+        # Deliberately NOT failOnStartupError: an MCP server that cannot reach
+        # the network must leave the harness up and tool-less, not crash-loop
+        # the whole GUI. The client retries in the background.
+
+# Extra sandbox writable roots (dsh-extra-writable-roots). Each entry must exist
+# and be a directory, unless `createMissingRoots` is set; declaring /tmp also
+# replaces the runner's private per-call tmpfs with the host directory, so temp
+# files persist across calls.
+#
+# The pnpm entries exist so an in-sandbox `pnpm install`/`pnpm add` (and npx)
+# works: pnpm keeps its content-addressable store outside every workspace, its
+# last-update state under the XDG state dir, npx caches under ~/.npm, and its
+# store-operation lock files under the per-login runtime dir. `$XDG_RUNTIME_DIR`
+# is expanded by the plugin, and `createMissingRoots` creates the lock
+# directory, which pnpm itself creates lazily — the first store operation can
+# happen after this row mounts, and failing the mount would take both sandbox
+# halves down with it.
+- id: extra-writable-roots
+  config:
+    writablePaths:
+      - "~/.cache"
+      - "~/.cargo"
+      - /tmp
+      # pnpm store lock files (uid 1000's per-login runtime directory).
+      - "$XDG_RUNTIME_DIR/pnpm-store-operation-locks-1000"
+      # pnpm's content-addressable store.
+      - "~/.local/share/pnpm"
+      # pnpm-state.json (the update-notifier state).
+      - "~/.local/state/pnpm"
+      # npx/npm cache, which `npx mcp-remote` writes.
+      - "~/.npm"
+    applyInReadOnly: false
+    createMissingRoots: true
+
+# REA — Reverse Engineer Anything (morluto/rea): a local stdio MCP server for
+# native binaries, JavaScript/Electron apps, .NET assemblies and websites.
+# Static analysis needs nothing extra; decompilation drives an already-installed
+# Hopper, Ghidra, or IDA, and the Android/firmware paths use their own tools.
+# Pinned to 6.5.0 so a boot cannot silently swap the tool catalogue — bump it
+# deliberately. First launch downloads the package into ~/.cache/npm, a declared
+# writable root.
+- insert:
+    - id: mcp-rea
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: rea
+        transport: stdio
+        command: npx
+        args:
+          - "-y"
+          - "rea-agents@6.5.0"
+          - "mcp"
+        # Ghidra and its JDK come from the Nix install. bin/ghidra-home.mjs
+        # resolves both store paths at mount, because the profile's `ghidra`
+        # launcher is an extension layer whose real install is a sibling store
+        # path. A missing Ghidra yields no variables (REA reports it
+        # unconfigured) rather than failing the row.
+        env: !!js >-
+          Object.fromEntries([
+            ["npm_config_cache", dshHomePath('..', '.cache', 'npm')],
+            ...process.getBuiltinModule('node:child_process')
+              .execFileSync(process.execPath, [dshHomePath('bin', 'ghidra-home.mjs')], { encoding: "utf8" })
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => line.split("=")),
+          ])
+        # Analyses run for minutes (decompilation, tracing), so the default
+        # 60s tool-call bound would abort them mid-flight.
+        toolCallTimeoutMs: 600000
+        # Non-fatal like the other rows: a failed first download or a missing
+        # decompiler costs the REA tools, never the GUI.
+        reconnect:
+          enabled: true
+          maxAttempts: 5
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+
+# Co-author identity (dsh-coauthor-identity, plugins/). The composer's model
+# picker is the source of truth: the plugin reads the Agent's live
+# provider/model at each prompt assembly, tells the model who it is running as,
+# and supplies the exact `Co-authored-by:` trailer to append to a git commit.
+# Keys are the exact `provider/model` pair the picker stores; a bare model id
+# matches any provider, and `*` is the last resort. An unlisted selection
+# contributes no text, so a newly added model is never credited as the wrong
+# vendor — add its pair here. Addresses are deployment choices: the model
+# catalog carries display names but no co-author addresses.
+#
+# Shared, because the table is keyed by model; a profile can override it
+# wholesale if a context needs different addresses.
+- id: coauthor-identity
+  config:
+    coAuthors:
+      # Bare model ids match either official DeepSeek route
+      # (deepseek-official for the API key, deepseek-account for sign-in).
+      "deepseek-flash":
+        name: DeepSeek-V4.1-Flash
+        email: noreply@deepseek.com
+      "deepseek-v4-pro":
+        name: DeepSeek-V4-Pro
+        email: noreply@deepseek.com
+      "openrouter/z-ai/glm-5.3-flash":
+        name: GLM-5.3-Flash
+        email: noreply@z.ai
+      "openrouter/z-ai/glm-5.3":
+        name: GLM-5.3
+        email: noreply@z.ai
+      "openrouter/moonshotai/kimi-k3":
+        name: Kimi K3
+        email: noreply@moonshot.ai
+
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: dark
+
+- id: session-log-deepseek
+  name: "@deepseek-ai/dsh-session-log-deepseek"
+  config:
+    enabled: false

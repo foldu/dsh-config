@@ -17,6 +17,9 @@ importers:
       dsh-coauthor-identity:
         specifier: link:../../plugins/dsh-coauthor-identity
         version: link:../../plugins/dsh-coauthor-identity
+      dsh-config-core:
+        specifier: link:../../bundles/dsh-config-core
+        version: link:../../bundles/dsh-config-core
       dsh-expand-all:
         specifier: link:../../plugins/dsh-expand-all
         version: link:../../plugins/dsh-expand-all
