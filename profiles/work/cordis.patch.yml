@@ -22,14 +22,14 @@
           - id: z-ai/glm-5.3
           - id: moonshotai/kimi-k3
 
-# This profile's credential document — a different file, and a different age
-# identity, from the home one. The path is written once and aliased by the
-# GitHub bridge below, so the provider and the child that decrypts it cannot
-# disagree.
+# This profile's credential document — a different file from the home one. The
+# path is written once and aliased by the GitHub bridge below, so the provider
+# and the child that decrypts it cannot disagree.
 #
-# The document is created where the work key lives. See README, "Using this repo
-# somewhere else": seed it with that machine's key, then commit the ciphertext
-# (or keep it out of the repo entirely and create it on each clone).
+# The identity file is the same one `web` uses (`keys.txt`): which key can read
+# *this* document is decided by `.sops.yaml`, not by a second file name. The
+# document does not exist yet — it is created where the work identity lives, and
+# until then this profile boots with every credential unresolved, by design.
 - insert:
     - id: credentials-sops
       name: "dsh-sops-credentials"

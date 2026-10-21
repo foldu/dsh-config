@@ -17,7 +17,7 @@ Version-controlled DeepSeek Harness home (`$DSH_HOME`). Tracks the harness
 | `plugins/dsh-claude-copilot-brand/` | Web sidebar brand override: the OpenAI logomark and the name "Claude Copilot" in place of the shipped whale and wordmark; see its README. |
 | `plugins/dsh-coauthor-identity/` | Tells the model selected in the composer who it is and the `Co-authored-by:` trailer to append to git commits; see its README. |
 | `plugins/dsh-sops-credentials/` | Credential provider that serves references *and* records from a SOPS document, decrypted in memory at startup; see its README. |
-| `.sops.yaml`, `secrets.<profile>.sops.yaml` | SOPS rules plus one encrypted credential document per profile — `secrets.web.sops.yaml` for `web`, `secrets.work.sops.yaml` for `work`: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose; each document is encrypted to the age identity of the machine that owns it. |
+| `.sops.yaml`, `secrets.<profile>.sops.yaml` | SOPS rules plus one encrypted credential document per profile — `secrets.web.sops.yaml` for `web`, `secrets.work.sops.yaml` for `work`: API keys at the top level, durable records under `records:`. Published as ciphertext on purpose. Each document has its own recipient in `.sops.yaml`, so the two are readable by different identities even though both look for the key in `~/.config/sops/age/keys.txt`. |
 | `bin/` | Bootstrap, secrets sync, plugin version sync (`update-plugins.mjs`), and the `sops-run.mjs` child-environment helper. |
 | `plugins/AGENTS.md` | Instructions for agents working on plugins here (TypeScript-first). |
 
@@ -69,9 +69,11 @@ GitHub MCP and the shipped tools, no reverse-engineering and no lab GitLab.
 
 ## Restore on a fresh machine
 
-Prerequisites: `dsh`, `pnpm`, `node`, `sops`. With the age identity at
-`~/.config/sops/age/keys.txt` every credential resolves; without it the harness
-still boots and credentials stay unresolved — see the next section.
+Prerequisites: `dsh`, `pnpm`, `node`, `sops`. Both profiles look for the age
+identity at `~/.config/sops/age/keys.txt`, but the two documents are encrypted
+to different recipients, so a credential resolves only for the profile whose
+identity is in that file. Without it the harness still boots and that profile's
+credentials stay unresolved — see the next section.
 
 ```sh
 git clone <this repo> ~/.dsh
@@ -91,25 +93,25 @@ box — three things differ, all of them by design:
    decrypted here. That is what makes it safe to publish: the ciphertext is
    public, the key is not. Leave that file alone — it belongs to the machine
    that owns its key, and editing it here would put *this* machine's keys into a
-   tracked file. The `work` profile already expects a different document,
-   `secrets.work.sops.yaml`, created here with this machine's key:
+   tracked file. The `work` profile expects a different document, and
+   `.sops.yaml` routes it to a different recipient:
 
    ```sh
-   age-keygen -o ~/.config/sops/age/keys.txt   # a new identity
+   age-keygen -o ~/.config/sops/age/keys.txt   # this machine's identity
    age-keygen -y ~/.config/sops/age/keys.txt   # its public key
 
-   # seed an empty document encrypted to this machine's key, then edit it;
-   # later edits reuse the recipients already recorded in the file
+   # put that public key in .sops.yaml's work rule (it holds a placeholder),
+   # then create the document; later `sops secrets.work.sops.yaml` edits reuse
+   # the recipients recorded in the file
    printf 'OPENROUTER_API_KEY: ""\n' >/tmp/seed.yml
-   sops --encrypt --input-type yaml \
-     --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" \
+   sops --encrypt --input-type yaml --filename-override secrets.work.sops.yaml \
      /tmp/seed.yml > secrets.work.sops.yaml
    sops secrets.work.sops.yaml
    ```
 
-   No config edit is needed either: the `work` profile's patch names that file,
-   and the GitHub bridge aliases the same path, so the provider and
-   `sops-run.mjs` cannot disagree about which key to use.
+   No profile edit is needed: the `work` profile's patch names the document, and
+   the GitHub bridge aliases the same path, so the provider and `sops-run.mjs`
+   cannot disagree about which key to use.
 
    `bin/bootstrap.sh work` warns rather than fails when the document cannot be
    read, so the rest of the restore still completes.

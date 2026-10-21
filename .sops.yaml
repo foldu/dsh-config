@@ -1,27 +1,33 @@
 # Creation rules for the DSH harness credential documents.
 #
-# There is one document per profile, and the profile names the file:
+# One document per profile, and each document has its own recipient — that is
+# the whole point of two files:
 #
-#   secrets.web.sops.yaml   used by `profiles/web`
-#   secrets.work.sops.yaml   used by `profiles/work`
+#   secrets.web.sops.yaml    encrypted to this machine's identity
+#   secrets.work.sops.yaml   encrypted to the work identity
 #
-# Both are ciphertext committed to the repo. Nothing selects between them at
-# runtime by guessing: each profile patch names its own file, so running
-# `dsh work` on the home machine still reads the work document.
+# The identity file is the same for both (`~/.config/sops/age/keys.txt`, the
+# sops default): which key opens a document is decided here, not by naming a
+# second key file.
 #
-# A file that already exists carries its own recipients in its `sops:` metadata,
-# so these rules only decide who a *new* file is encrypted to. The key below is
-# this machine's; a document created somewhere else should be seeded with that
-# machine's key instead:
+# A rule only decides who a *new* file is encrypted to. An existing document
+# carries its recipients in its `sops:` metadata, so editing one needs no rule.
+#
+# TODO: replace the placeholder below with the work identity's public key
+# (`age-keygen -y ~/.config/sops/age/keys.txt` on the work machine). Until it is
+# replaced, creating `secrets.work.sops.yaml` fails on an invalid recipient —
+# loudly, which is the intent. Creating the document with an explicit recipient
+# also works and records the key in the file itself:
 #
 #   sops --encrypt --age "$(age-keygen -y ~/.config/sops/age/keys.txt)" ...
-#
-# The rule matches both names so that `sops secrets.work.sops.yaml` applies the
-# right recipients here, and so re-keying with
-#   sops updatekeys secrets.web.sops.yaml
-# works without repeating the age1… key in each project.
 creation_rules:
-  - path_regex: secrets\.(web|work)\.sops\.ya?ml$
+  - path_regex: secrets\.web\.sops\.ya?ml$
     key_groups:
       - age:
           - age14yat0hyq3w0ahkzetdw9t9q28x2pe3x4e27qs2kw9e968frdec3sx0ntr7
+
+  - path_regex: secrets\.work\.sops\.ya?ml$
+    key_groups:
+      - age:
+          # PLACEHOLDER — replace with the work public key.
+          - age1placeholderworkpublickey000000000000000000000000000
