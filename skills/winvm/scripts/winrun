@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Run a local PowerShell file inside the winvm Windows guest on jupiter.
+#
+#   winrun test.ps1                      upload, run, stream, exit with its status
+#   winrun -o ./artifacts test.ps1       ... then pull C:\winvm\out back
+#   winrun -r test.ps1                   reset to `base` first (clean machine)
+#
+# The file is uploaded to C:\winvm\run; write anything worth keeping to
+# C:\winvm\out and -o collects it. Remaining arguments are passed to the script.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage: winrun [-r] [-o LOCALDIR] SCRIPT.ps1 [args...]
+
+  -r           reset the guest to its `base` snapshot first, wait for ssh
+  -o LOCALDIR  after the run, pull C:\winvm\out into LOCALDIR
+
+Requires `winvm` on PATH (jupiter). Exit status is the script's own.
+EOF
+}
+
+out=""
+reset=0
+while getopts ":o:rh" opt; do
+  case $opt in
+  o) out=$OPTARG ;;
+  r) reset=1 ;;
+  h) usage; exit 0 ;;
+  \?)
+    printf 'winrun: unknown option -%s\n' "$OPTARG" >&2
+    usage >&2
+    exit 2
+    ;;
+  :)
+    printf 'winrun: -%s needs a value\n' "$OPTARG" >&2
+    exit 2
+    ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+if [ $# -lt 1 ]; then
+  usage >&2
+  exit 2
+fi
+script=$1
+shift
+[ -f "$script" ] || {
+  printf 'winrun: no such file: %s\n' "$script" >&2
+  exit 2
+}
+command -v winvm >/dev/null || {
+  printf 'winrun: winvm is not on PATH -- this only runs on jupiter\n' >&2
+  exit 2
+}
+
+# One probe instead of guessing sleep durations: the guest answers ssh or it does
+# not, and "connection refused" from an offline domain needs a readable message.
+wait_for_ssh() {
+  for _ in $(seq 1 60); do
+    if winvm ssh -- cmd /c exit 0 >/dev/null 2>&1; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+
+if [ "$reset" = 1 ]; then
+  winvm reset
+fi
+
+# A shut-off domain is a different failure from a guest that is still booting, and
+# waiting two minutes on the first one just hides the fix.
+case $(winvm status --json 2>/dev/null || true) in
+*'"state":"running"'*) ;;
+*)
+  printf 'winrun: the guest is shut off -- winvm up, or winrun -r to reset it\n' >&2
+  exit 2
+  ;;
+esac
+
+wait_for_ssh || {
+  printf 'winrun: the guest is running but ssh does not answer -- screenshot it, or winvm reset\n' >&2
+  exit 2
+}
+
+name=$(basename "$script")
+remote='C:\winvm\run'
+
+winvm ps "New-Item -ItemType Directory -Force '$remote' | Out-Null; New-Item -ItemType Directory -Force 'C:\winvm\out' | Out-Null"
+tar -C "$(dirname "$script")" -cf - "$name" | winvm ssh "tar -C $remote -xf -"
+
+set +e
+# shellcheck disable=SC2086 # remaining args belong to the PowerShell command line
+winvm ssh "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $remote\\$name $*"
+rc=$?
+set -e
+
+# A failed run is exactly when the artifacts matter most, so collect them anyway.
+if [ -n "$out" ]; then
+  mkdir -p "$out"
+  winvm ssh "tar -C C:\\winvm\\out -cf - ." | tar -C "$out" -xf - || true
+fi
+
+exit "$rc"
