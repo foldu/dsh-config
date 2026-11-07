@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# fwd-ssh — ssh inside DSH's Linux sandbox, on the agent forwarded from the
+# machine whose ssh session holds it (dsh-chrome's tunnel), not this host's
+# Bitwarden agent.
+#
+# Three sandbox facts make plain `ssh` unusable here:
+#
+#   1. /etc/ssh/ssh_config starts with an Include of root-owned store files
+#      (systemd-ssh-proxy, and libvirt's snippet where enabled). bwrap maps
+#      only this uid, so root shows as 65534 and OpenSSH rejects the include
+#      with "Bad owner or permissions". -F keeps ssh to the user config only;
+#      OpenSSH does not check the top-level file that way.
+#   2. SSH_AUTH_SOCK is the session-wide Bitwarden socket, which needs the
+#      vault unlocked on this machine. sshd instead writes one forwarded-agent
+#      socket per connection under ~/.ssh/agent/, with a new name every time,
+#      so pick a live one at call time.
+#   3. ~/.ssh/config pins ~/.ssh/pubkeys/home.pub with IdentitiesOnly yes; that
+#      key is held by Bitwarden, not by the forwarded agent. Relax the pin so
+#      the forwarded agent's keys (e.g. barnabas@home) are offered.
+#
+# Use it anywhere ssh would be used:
+#   fwd-ssh venus.home.5kw.li 'uptime'
+#   GIT_SSH_COMMAND=$HOME/.dsh/bin/fwd-ssh git fetch
+#   rsync -e $HOME/.dsh/bin/fwd-ssh ...
+#   scp -S $HOME/.dsh/bin/fwd-ssh ...
+#
+# Options are passed through. Pass your own -F or IdentitiesOnly=... to
+# override the defaults below.
+
+set -u
+
+pick_agent() {
+	local sock
+	# An explicit choice wins: FWD_SSH_AGENT=/path/to/socket fwd-ssh …
+	if [ -n "${FWD_SSH_AGENT:-}" ] && [ -S "$FWD_SSH_AGENT" ] &&
+		SSH_AUTH_SOCK=$FWD_SSH_AGENT timeout 2 ssh-add -l >/dev/null 2>&1; then
+		printf '%s\n' "$FWD_SSH_AGENT"
+		return 0
+	fi
+	# Otherwise newest first: the most recent forwarding session is the one
+	# dsh-chrome just opened. The first whose client answers wins.
+	while IFS= read -r sock; do
+		[ -S "$sock" ] || continue
+		if SSH_AUTH_SOCK=$sock timeout 2 ssh-add -l >/dev/null 2>&1; then
+			printf '%s\n' "$sock"
+			return 0
+		fi
+	done < <(ls -t "$HOME"/.ssh/agent/s.* 2>/dev/null)
+	return 1
+}
+
+agent=""
+if agent=$(pick_agent); then
+	:
+else
+	# No forwarded session: fall back to the ambient agent (Bitwarden), which
+	# works when the vault is unlocked.
+	agent="${SSH_AUTH_SOCK:-}"
+fi
+
+args=()
+have_F=0
+have_pin=0
+for arg in "$@"; do
+	case "$arg" in
+	-F | -F*) have_F=1 ;;
+	IdentitiesOnly=*) have_pin=1 ;;
+	esac
+done
+
+[ "$have_F" -eq 1 ] || args+=(-F "$HOME/.ssh/config")
+[ "$have_pin" -eq 1 ] || args+=(-o IdentitiesOnly=no)
+
+if [ -n "$agent" ]; then
+	exec env SSH_AUTH_SOCK="$agent" ssh "${args[@]}" "$@"
+fi
+exec ssh "${args[@]}" "$@"
