@@ -1,0 +1,12 @@
+# Modal navigation (dsh-vim-control).
+#
+# One row: the package's Host half is an empty `apply`, because every effect is
+# browser-side. The Client half is declared by `dsh.client` in package.json and
+# served by dsh-client-modules under the package name; this row only makes the
+# Loader mount it.
+#
+# No shipped row is replaced or disabled: the plugin adds a chip to
+# `shell.overlay` and a capture-phase key listener of its own.
+- insert:
+    - id: vim-control
+      name: 'dsh-vim-control'

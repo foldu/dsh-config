@@ -1,0 +1,6 @@
+# Build-script decision: esbuild's install step links the platform binary that
+# builds this package's Client bundle. Without this allowance pnpm fails with
+# ERR_PNPM_IGNORED_BUILDS, and bin/bootstrap.sh runs `pnpm install` under
+# `set -e`, so a fresh clone would abort before the plugin ever builds.
+allowBuilds:
+  esbuild: true
